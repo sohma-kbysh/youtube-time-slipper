@@ -1,0 +1,147 @@
+/*
+ * Injected at document_start, before YouTube paints.
+ *
+ * Every rule is scoped under html[data-time-slipper="on"], so when the
+ * extension is disabled the stylesheet is inert even though it is still loaded.
+ */
+
+/* ------------------------------------------------------------------ cards */
+
+/*
+ * `pending` is hidden. A card is shown only once it has been positively
+ * cleared, never merely because nothing has objected yet — this is what stops
+ * a future video appearing for the half second before its date comes back.
+ */
+html[data-time-slipper="on"] [data-time-slipper-state="pending"],
+html[data-time-slipper="on"] [data-time-slipper-state="future"] {
+  display: none !important;
+}
+
+/* Undated videos follow the unknown policy; strict ("hide") is the default. */
+html[data-time-slipper="on"][data-time-slipper-unknown="hide"]
+  [data-time-slipper-state="unknown"] {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------ watch guard */
+
+/*
+ * While the current video's date is unknown, the player is hidden and its
+ * audio is stopped by script. `visibility` rather than `display` so YouTube's
+ * player still initialises and the page does not reflow when it is released —
+ * a display:none player makes YouTube's own layout code misbehave.
+ */
+html[data-time-slipper-watch="pending"] #movie_player,
+html[data-time-slipper-watch="pending"] ytd-player,
+html[data-time-slipper-watch="pending"] .html5-video-player,
+html[data-time-slipper-watch="blocked"] #movie_player,
+html[data-time-slipper-watch="blocked"] ytd-player,
+html[data-time-slipper-watch="blocked"] .html5-video-player {
+  visibility: hidden !important;
+}
+
+/* On a blocked page, hide the surrounding metadata too: title, description,
+   comments and the recommendation rail all describe a video that, in this
+   timeline, does not exist. */
+html[data-time-slipper-watch="blocked"] #below,
+html[data-time-slipper-watch="blocked"] #secondary,
+html[data-time-slipper-watch="blocked"] #comments,
+html[data-time-slipper-watch="blocked"] ytd-watch-metadata {
+  display: none !important;
+}
+
+.time-slipper-block {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0b0e14;
+  color: #e8ecf5;
+  font-family: "Roboto", "Noto Sans JP", system-ui, sans-serif;
+}
+
+.time-slipper-block__panel {
+  max-width: 28rem;
+  padding: 2.5rem;
+  text-align: center;
+}
+
+.time-slipper-block__title {
+  margin: 0 0 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.time-slipper-block__rows {
+  margin: 0 0 2rem;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.5rem 1.5rem;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.time-slipper-block__label {
+  color: #93a0b8;
+  text-align: left;
+}
+
+.time-slipper-block__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-slipper-block__button {
+  padding: 0.6rem 1.6rem;
+  border: 1px solid #3a465e;
+  border-radius: 999px;
+  background: transparent;
+  color: #e8ecf5;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.time-slipper-block__button:hover {
+  background: #1a2130;
+}
+
+/* ------------------------------------------------------------------ badge */
+
+.time-slipper-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: 0.75rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid rgba(127, 223, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(127, 223, 255, 0.08);
+  color: #7fdfff;
+  font-family: "Roboto", "Noto Sans JP", system-ui, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+/* Fallback position for when the masthead is not present (e.g. Shorts on some
+   layouts), so the user can always tell the timeline is active. */
+.time-slipper-badge--floating {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2147483645;
+  background: #10131c;
+}
+
+.time-slipper-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7fdfff;
+}
