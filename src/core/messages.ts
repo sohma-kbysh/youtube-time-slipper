@@ -14,6 +14,8 @@ export const MESSAGE_RESOLVE_VIDEO_DATES = "RESOLVE_VIDEO_DATES" as const;
 export const MESSAGE_VIDEO_DATES_RESOLVED = "VIDEO_DATES_RESOLVED" as const;
 export const MESSAGE_DISCOVER_ERA = "DISCOVER_ERA" as const;
 export const MESSAGE_ERA_DISCOVERED = "ERA_DISCOVERED" as const;
+export const MESSAGE_VERIFY_API_KEY = "VERIFY_API_KEY" as const;
+export const MESSAGE_API_KEY_VERIFIED = "API_KEY_VERIFIED" as const;
 export const MESSAGE_RESOLVE_ERROR = "RESOLVE_ERROR" as const;
 
 /** Cap on discoveries requested at once, bounding the worker's fan-out. */
@@ -44,6 +46,27 @@ export interface DiscoverEraRequest {
   end: CalendarDate;
   limit: number;
   exclude: VideoId[];
+  /**
+   * What the page is about, so an API search can be asked the right question:
+   * the user's search terms, or the channel being viewed. Both optional — with
+   * neither, the search is simply "what was big at the time".
+   */
+  query?: string;
+  channelId?: string;
+}
+
+export interface VerifyApiKeyRequest {
+  type: typeof MESSAGE_VERIFY_API_KEY;
+  apiKey: string;
+}
+
+export interface ApiKeyVerifiedResponse {
+  type: typeof MESSAGE_API_KEY_VERIFIED;
+  ok: boolean;
+  /** Machine-readable failure kind, for a translated message. */
+  errorKind?: string;
+  /** The API's own message, shown verbatim so a problem is diagnosable. */
+  detail?: string;
 }
 
 export interface EraDiscoveredResponse {
@@ -55,12 +78,34 @@ export interface EraDiscoveredResponse {
   }>;
 }
 
-export type ExtensionRequest = ResolveVideoDatesRequest | DiscoverEraRequest;
+export type ExtensionRequest =
+  | ResolveVideoDatesRequest
+  | DiscoverEraRequest
+  | VerifyApiKeyRequest;
 
 export type ExtensionResponse =
   | VideoDatesResolvedResponse
   | EraDiscoveredResponse
+  | ApiKeyVerifiedResponse
   | ResolveErrorResponse;
+
+export function isVerifyApiKeyRequest(value: unknown): value is VerifyApiKeyRequest {
+  if (typeof value !== "object" || value === null) return false;
+
+  const candidate = value as Partial<VerifyApiKeyRequest>;
+  return (
+    candidate.type === MESSAGE_VERIFY_API_KEY && typeof candidate.apiKey === "string"
+  );
+}
+
+export function isApiKeyVerifiedResponse(
+  value: unknown
+): value is ApiKeyVerifiedResponse {
+  if (typeof value !== "object" || value === null) return false;
+
+  const candidate = value as Partial<ApiKeyVerifiedResponse>;
+  return candidate.type === MESSAGE_API_KEY_VERIFIED && typeof candidate.ok === "boolean";
+}
 
 export function isDiscoverEraRequest(value: unknown): value is DiscoverEraRequest {
   if (typeof value !== "object" || value === null) return false;

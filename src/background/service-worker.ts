@@ -16,13 +16,19 @@ import { debug, warn } from "../core/log.js";
 import {
   MAX_DISCOVERY_LIMIT,
   MAX_VIDEO_IDS_PER_REQUEST,
+  MESSAGE_API_KEY_VERIFIED,
   MESSAGE_ERA_DISCOVERED,
   MESSAGE_RESOLVE_ERROR,
   MESSAGE_VIDEO_DATES_RESOLVED,
   isDiscoverEraRequest,
   isResolveVideoDatesRequest,
+  isVerifyApiKeyRequest,
+  type DiscoverEraRequest,
   type ExtensionResponse
 } from "../core/messages.js";
+import { loadSettings } from "../storage/settings.js";
+import { createEraSearch } from "./era-search.js";
+import { createYouTubeApi, YouTubeApiError } from "./youtube-api.js";
 import type { PublicationResolution, VideoId } from "../core/types.js";
 import { IndexedDbCache, MemoryCache, type PublicationCache } from "./cache.js";
 import { createDiscovery } from "./discovery.js";
@@ -49,15 +55,74 @@ const discovery = createDiscovery({
   getWatchData: (videoId) => resolver.getWatchData(videoId)
 });
 
+const eraSearch = createEraSearch();
+const api = createYouTubeApi();
+
+/**
+ * Answer a discovery request.
+ *
+ * The API is tried first when the user has supplied a key: it can ask for a
+ * date range directly, so the result is a real sample of the period rather
+ * than an inference from today's recommendations. Everything else — no key, no
+ * permission, quota gone, a network failure — falls through to the free
+ * related-video walk, so discovery always returns *something*.
+ */
+async function discoverEra(message: DiscoverEraRequest) {
+  const settings = await loadSettings();
+  const limit = Math.min(message.limit, MAX_DISCOVERY_LIMIT);
+
+  if (settings.apiKey) {
+    const outcome = await eraSearch.search({
+      apiKey: settings.apiKey,
+      order: settings.apiOrder,
+      start: message.start,
+      end: message.end,
+      limit,
+      ...(message.query ? { query: message.query } : {}),
+      ...(message.channelId ? { channelId: message.channelId } : {}),
+      exclude: [...(message.exclude ?? []), ...message.seeds]
+    });
+
+    if (outcome.videos.length > 0) {
+      return outcome.videos.map((video) => ({
+        videoId: video.videoId,
+        title: video.title,
+        publishedDate: video.publishedDate
+      }));
+    }
+  }
+
+  const walked = await discovery.discover({
+    seeds: message.seeds.slice(0, MAX_VIDEO_IDS_PER_REQUEST),
+    start: message.start,
+    end: message.end,
+    limit,
+    exclude: message.exclude ?? []
+  });
+
+  return walked.map(({ videoId, title, publishedDate }) => ({
+    videoId,
+    title,
+    publishedDate
+  }));
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const isResolve = isResolveVideoDatesRequest(message);
   const isDiscover = isDiscoverEraRequest(message);
-  if (!isResolve && !isDiscover) return false;
+  const isVerify = isVerifyApiKeyRequest(message);
+  if (!isResolve && !isDiscover && !isVerify) return false;
 
   // Only YouTube tabs may ask. The manifest already restricts injection, but
   // the messaging channel is reachable from any extension page.
   const origin = sender.origin ?? sender.url ?? "";
-  if (!origin.startsWith("https://www.youtube.com")) {
+  // The popup is an extension page, and it is the only thing that verifies a
+  // key; page content never sees the key at all.
+  const allowed = isVerify
+    ? origin.startsWith(`chrome-extension://${chrome.runtime.id}`)
+    : origin.startsWith("https://www.youtube.com");
+
+  if (!allowed) {
     sendResponse({
       type: MESSAGE_RESOLVE_ERROR,
       message: "unsupported origin"
@@ -90,22 +155,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  discovery
-    .discover({
-      seeds: message.seeds.slice(0, MAX_VIDEO_IDS_PER_REQUEST),
-      start: message.start,
-      end: message.end,
-      limit: Math.min(message.limit, MAX_DISCOVERY_LIMIT),
-      exclude: message.exclude ?? []
-    })
+  if (isVerify) {
+    api
+      .verifyKey(message.apiKey)
+      .then(() => {
+        sendResponse({
+          type: MESSAGE_API_KEY_VERIFIED,
+          ok: true
+        } satisfies ExtensionResponse);
+      })
+      .catch((error: unknown) => {
+        sendResponse({
+          type: MESSAGE_API_KEY_VERIFIED,
+          ok: false,
+          errorKind: error instanceof YouTubeApiError ? error.kind : "unexpected",
+          detail: error instanceof Error ? error.message : String(error)
+        } satisfies ExtensionResponse);
+      });
+
+    return true;
+  }
+
+  discoverEra(message)
     .then((videos) => {
       sendResponse({
         type: MESSAGE_ERA_DISCOVERED,
-        videos: videos.map(({ videoId, title, publishedDate }) => ({
-          videoId,
-          title,
-          publishedDate
-        }))
+        videos
       } satisfies ExtensionResponse);
     })
     .catch(failed);

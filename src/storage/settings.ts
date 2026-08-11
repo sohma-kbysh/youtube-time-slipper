@@ -15,6 +15,7 @@ import {
   isValidCalendarDate,
   todayAsCalendarDate
 } from "../core/date.js";
+import type { EraSearchOrder } from "../background/youtube-api.js";
 import { isLanguage } from "../core/i18n.js";
 import type {
   ConfigurableSurface,
@@ -42,6 +43,9 @@ export const MIN_FILL_ROUNDS = 1;
  * of YouTube from a single tab.
  */
 export const MAX_FILL_ROUNDS = 300;
+
+/** Orderings the popup offers for API searches. */
+export const API_ORDERS: EraSearchOrder[] = ["viewCount", "relevance", "date"];
 
 export const CONFIGURABLE_SURFACES: ConfigurableSurface[] = [
   "home",
@@ -76,6 +80,8 @@ export function defaultSettings(now: Date = new Date()): Settings {
     fillTargetVisible: DEFAULT_FILL_TARGET,
     fillMaxRounds: DEFAULT_FILL_ROUNDS,
     discoverEra: true,
+    apiKey: "",
+    apiOrder: "viewCount",
     language: "auto",
     surfaces: {
       home: true,
@@ -178,6 +184,10 @@ export function normalizeSettings(raw: unknown, now: Date = new Date()): Setting
       MAX_FILL_ROUNDS
     ),
     discoverEra: asBoolean(source["discoverEra"], defaults.discoverEra),
+    apiKey: typeof source["apiKey"] === "string" ? source["apiKey"].trim() : "",
+    apiOrder: API_ORDERS.includes(source["apiOrder"] as EraSearchOrder)
+      ? (source["apiOrder"] as EraSearchOrder)
+      : defaults.apiOrder,
     language: isLanguage(source["language"]) ? source["language"] : defaults.language,
     surfaces
   };

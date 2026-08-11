@@ -6,6 +6,7 @@
  * it is testable in plain Node.
  */
 
+import type { EraSearchOrder } from "../background/youtube-api.js";
 import type { Language } from "./i18n.js";
 
 /** A canonical 11-character YouTube video id, e.g. `dQw4w9WgXcQ`. */
@@ -77,6 +78,20 @@ export interface Settings {
    * related-video graph outward from videos already inside the window.
    */
   discoverEra: boolean;
+
+  /**
+   * The user's own YouTube Data API key, or "" for none.
+   *
+   * With a key, discovery can ask for a real date range ordered by views
+   * instead of inferring an era from related videos. The key belongs to the
+   * user: it is stored in this browser and sent only to googleapis.com. The
+   * extension ships no key of its own, because one shared key would be
+   * exhausted immediately and would bill one person for everyone.
+   */
+  apiKey: string;
+
+  /** How the API should rank results within the window. */
+  apiOrder: EraSearchOrder;
 
   /**
    * Keep asking YouTube for more items while filtering leaves a feed nearly

@@ -14,6 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MESSAGE_DISCOVER_ERA,
   MESSAGE_ERA_DISCOVERED,
+  MESSAGE_RESOLVE_ERROR,
+  MESSAGE_RESOLVE_VIDEO_DATES,
   MESSAGE_VIDEO_DATES_RESOLVED,
   type ExtensionRequest,
   type ResolveVideoDatesRequest
@@ -46,6 +48,10 @@ function installChromeStub(initial: Partial<Settings>): void {
   // The stub answers both request types, so it is typed as the union the
   // content script actually sends.
   sendMessage = vi.fn(async (request: ExtensionRequest) => {
+    if (request.type !== MESSAGE_DISCOVER_ERA && request.type !== MESSAGE_RESOLVE_VIDEO_DATES) {
+      return { type: MESSAGE_RESOLVE_ERROR, message: "unsupported in stub" };
+    }
+
     if (request.type === MESSAGE_DISCOVER_ERA) {
       return {
         type: MESSAGE_ERA_DISCOVERED,

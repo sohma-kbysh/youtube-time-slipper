@@ -160,6 +160,40 @@ export function surfaceForCard(href: string, pageSurface: Surface): Surface {
   return pageSurface;
 }
 
+/**
+ * What the current page is about, for an API search.
+ *
+ * The search terms turn "find era videos" into "find era videos about this",
+ * which is the difference between a random sample of 2011 and the 2011 version
+ * of the page the user is actually looking at.
+ */
+export function readPageContext(location: Location | URL): {
+  query?: string;
+  channelId?: string;
+} {
+  const context: { query?: string; channelId?: string } = {};
+
+  const query = new URLSearchParams(location.search).get("search_query");
+  if (query) context.query = query;
+
+  const fromPath = /^\/channel\/(UC[\w-]{22})/.exec(location.pathname)?.[1];
+  if (fromPath) {
+    context.channelId = fromPath;
+    return context;
+  }
+
+  // Handle-based channel URLs (/@name) carry the real id in the canonical link.
+  const canonical = document
+    .querySelector('link[rel="canonical"]')
+    ?.getAttribute("href");
+  const fromCanonical = canonical
+    ? /\/channel\/(UC[\w-]{22})/.exec(canonical)?.[1]
+    : undefined;
+  if (fromCanonical) context.channelId = fromCanonical;
+
+  return context;
+}
+
 /** Where the timeline badge is mounted, when the masthead exists. */
 export function findMastheadMount(): HTMLElement | null {
   const masthead = document.querySelector("ytd-masthead #end, #masthead #end");

@@ -12,6 +12,10 @@
     "https://www.youtube.com/*"
   ],
 
+  "optional_host_permissions": [
+    "https://www.googleapis.com/*"
+  ],
+
   "background": {
     "service_worker": "background.js",
     "type": "module"

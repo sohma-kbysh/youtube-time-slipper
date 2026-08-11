@@ -25,7 +25,11 @@ import {
 import { decideCardState, isActive, isSurfaceEnabled } from "../core/policy.js";
 import type { CalendarDate, Settings, VideoId } from "../core/types.js";
 import { defaultSettings, loadSettings, onSettingsChanged } from "../storage/settings.js";
-import { detectPageSurface, readDocumentPublicationMeta } from "./adapters.js";
+import {
+  detectPageSurface,
+  readDocumentPublicationMeta,
+  readPageContext
+} from "./adapters.js";
 import { Backfill } from "./backfill.js";
 import {
   removeDiscovery,
@@ -392,13 +396,18 @@ async function runDiscovery(): Promise<void> {
   renderDiscovery({ status: "searching" }, t);
 
   try {
+    // What the page is about, so an API search can be asked the era version of
+    // the user's actual question rather than a generic one.
+    const context = readPageContext(window.location);
+
     const response = await chrome.runtime.sendMessage({
       type: MESSAGE_DISCOVER_ERA,
       seeds,
       start: settings.rangeStart,
       end: settings.virtualDate,
       limit: DISCOVERY_LIMIT,
-      exclude: [...resolutions.keys()]
+      exclude: [...resolutions.keys()],
+      ...context
     });
 
     if (!isEraDiscoveredResponse(response)) throw new Error("unexpected response");
