@@ -104,6 +104,7 @@ describe("countStates", () => {
       pending: 0,
       visible: 1,
       future: 2,
+      before: 0,
       unknown: 0
     });
   });

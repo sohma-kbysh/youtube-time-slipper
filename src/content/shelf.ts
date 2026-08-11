@@ -26,7 +26,7 @@ export function isHiddenState(
   state: string | null,
   settings: Pick<Settings, "unknownPolicy">
 ): boolean {
-  if (state === "future" || state === "pending") return true;
+  if (state === "future" || state === "before" || state === "pending") return true;
   if (state === "unknown") return settings.unknownPolicy === "hide";
   return false;
 }

@@ -46,6 +46,34 @@ describe("classifyVideo", () => {
   });
 });
 
+describe("classifyVideo with a period", () => {
+  const settings = settingsWith({
+    rangeStart: "2010-01-01",
+    virtualDate: "2012-08-12"
+  });
+
+  it("shows videos inside the window, including both edges", () => {
+    expect(classifyVideo("2010-01-01", settings)).toBe("visible");
+    expect(classifyVideo("2011-06-15", settings)).toBe("visible");
+    expect(classifyVideo("2012-08-12", settings)).toBe("visible");
+  });
+
+  it("hides videos on either side of the window", () => {
+    expect(classifyVideo("2009-12-31", settings)).toBe("before");
+    expect(classifyVideo("2012-08-13", settings)).toBe("future");
+  });
+
+  it("ignores a malformed lower bound rather than hiding everything", () => {
+    const broken = settingsWith({ rangeStart: "not-a-date" });
+    expect(classifyVideo("2008-01-01", broken)).toBe("visible");
+  });
+
+  it("treats no lower bound as no lower bound", () => {
+    const open = settingsWith({ rangeStart: null });
+    expect(classifyVideo("2006-01-01", open)).toBe("visible");
+  });
+});
+
 describe("shouldHide", () => {
   it("hides pending cards so future videos never flash on screen", () => {
     expect(shouldHide("pending", { unknownPolicy: "hide" })).toBe(true);
@@ -59,6 +87,11 @@ describe("shouldHide", () => {
 
   it("never hides videos that were cleared", () => {
     expect(shouldHide("visible", { unknownPolicy: "hide" })).toBe(false);
+  });
+
+  it("hides videos from before the window", () => {
+    expect(shouldHide("before", { unknownPolicy: "hide" })).toBe(true);
+    expect(shouldHide("before", { unknownPolicy: "show" })).toBe(true);
   });
 
   it("follows the unknown policy for undated videos", () => {

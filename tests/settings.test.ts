@@ -66,6 +66,62 @@ describe("normalizeSettings", () => {
     }
   });
 
+  it("keeps a start date that sits inside the window", () => {
+    const normalized = normalizeSettings(
+      { virtualDate: "2012-08-12", rangeStart: "2010-01-01" },
+      now
+    );
+    expect(normalized.rangeStart).toBe("2010-01-01");
+  });
+
+  it("drops a start date later than the virtual present", () => {
+    // Keeping it would hide every video, which is never what was meant.
+    const normalized = normalizeSettings(
+      { virtualDate: "2012-08-12", rangeStart: "2015-01-01" },
+      now
+    );
+    expect(normalized.rangeStart).toBeNull();
+  });
+
+  it("drops a malformed start date", () => {
+    expect(normalizeSettings({ rangeStart: "2012-99-99" }, now).rangeStart).toBeNull();
+    expect(normalizeSettings({ rangeStart: 5 }, now).rangeStart).toBeNull();
+  });
+
+  it("clamps the refill numbers into a usable range", () => {
+    expect(normalizeSettings({ fillTargetVisible: 0 }, now).fillTargetVisible).toBe(5);
+    expect(normalizeSettings({ fillTargetVisible: 9999 }, now).fillTargetVisible).toBe(
+      200
+    );
+    expect(normalizeSettings({ fillMaxRounds: -3 }, now).fillMaxRounds).toBe(1);
+    expect(normalizeSettings({ fillMaxRounds: 100000 }, now).fillMaxRounds).toBe(300);
+    expect(normalizeSettings({ fillTargetVisible: 33.6 }, now).fillTargetVisible).toBe(
+      34
+    );
+  });
+
+  it("falls back for unusable refill numbers", () => {
+    expect(normalizeSettings({ fillTargetVisible: "many" }, now).fillTargetVisible).toBe(
+      20
+    );
+    expect(normalizeSettings({ fillMaxRounds: NaN }, now).fillMaxRounds).toBe(25);
+  });
+
+  it("keeps only string feature ids", () => {
+    expect(
+      normalizeSettings({ allowedFeatures: ["shorts", 7, null, "playables"] }, now)
+        .allowedFeatures
+    ).toEqual(["shorts", "playables"]);
+    expect(normalizeSettings({ allowedFeatures: "shorts" }, now).allowedFeatures).toEqual(
+      []
+    );
+  });
+
+  it("hides anachronistic features by default", () => {
+    expect(defaultSettings().hideFutureFeatures).toBe(true);
+    expect(defaultSettings().rangeStart).toBeNull();
+  });
+
   it("fills in surfaces added by a later version", () => {
     const legacy = { surfaces: { home: false } };
     const normalized = normalizeSettings(legacy, now);

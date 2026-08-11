@@ -10,7 +10,11 @@
  *    re-evaluates through `chrome.storage.onChanged` without a page reload.
  */
 
-import { isValidCalendarDate, todayAsCalendarDate } from "../core/date.js";
+import {
+  compareCalendarDates,
+  isValidCalendarDate,
+  todayAsCalendarDate
+} from "../core/date.js";
 import { isLanguage } from "../core/i18n.js";
 import type {
   ConfigurableSurface,
@@ -19,6 +23,25 @@ import type {
 } from "../core/types.js";
 
 const STORAGE_KEY = "settings";
+
+/**
+ * Refill defaults, and the range the popup and normaliser will accept.
+ *
+ * Declared above `defaultSettings`, which reads them at module evaluation time
+ * to build `DEFAULT_SETTINGS`.
+ */
+export const DEFAULT_FILL_TARGET = 20;
+export const MIN_FILL_TARGET = 5;
+export const MAX_FILL_TARGET = 200;
+
+export const DEFAULT_FILL_ROUNDS = 25;
+export const MIN_FILL_ROUNDS = 1;
+/**
+ * Upper bound on extra page loads. High enough to fill a page for a cutoff a
+ * few years back, and bounded so a setting cannot turn into an unbounded crawl
+ * of YouTube from a single tab.
+ */
+export const MAX_FILL_ROUNDS = 300;
 
 export const CONFIGURABLE_SURFACES: ConfigurableSurface[] = [
   "home",
@@ -44,9 +67,14 @@ export function defaultSettings(now: Date = new Date()): Settings {
   return {
     enabled: false,
     virtualDate: todayAsCalendarDate(now),
+    rangeStart: null,
     unknownPolicy: "hide",
     showTimelineBadge: true,
+    hideFutureFeatures: true,
+    allowedFeatures: [],
     fillFeed: true,
+    fillTargetVisible: DEFAULT_FILL_TARGET,
+    fillMaxRounds: DEFAULT_FILL_ROUNDS,
     language: "auto",
     surfaces: {
       home: true,
@@ -64,6 +92,22 @@ export const DEFAULT_SETTINGS: Settings = defaultSettings();
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function asInteger(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string");
 }
 
 /**
@@ -96,15 +140,42 @@ export function normalizeSettings(raw: unknown, now: Date = new Date()): Setting
     surfaces[surface] = asBoolean(rawSurfaces[surface], defaults.surfaces[surface]);
   }
 
+  // A start date after the virtual present would hide everything, which is
+  // never what the user meant; drop it rather than empty the page.
+  const rawStart = source["rangeStart"];
+  const rangeStart =
+    isValidCalendarDate(rawStart) &&
+    compareCalendarDates(rawStart as string, virtualDate) <= 0
+      ? (rawStart as string)
+      : null;
+
   return {
     enabled: asBoolean(source["enabled"], defaults.enabled),
     virtualDate,
+    rangeStart,
     unknownPolicy,
     showTimelineBadge: asBoolean(
       source["showTimelineBadge"],
       defaults.showTimelineBadge
     ),
+    hideFutureFeatures: asBoolean(
+      source["hideFutureFeatures"],
+      defaults.hideFutureFeatures
+    ),
+    allowedFeatures: asStringArray(source["allowedFeatures"]),
     fillFeed: asBoolean(source["fillFeed"], defaults.fillFeed),
+    fillTargetVisible: asInteger(
+      source["fillTargetVisible"],
+      defaults.fillTargetVisible,
+      MIN_FILL_TARGET,
+      MAX_FILL_TARGET
+    ),
+    fillMaxRounds: asInteger(
+      source["fillMaxRounds"],
+      defaults.fillMaxRounds,
+      MIN_FILL_ROUNDS,
+      MAX_FILL_ROUNDS
+    ),
     language: isLanguage(source["language"]) ? source["language"] : defaults.language,
     surfaces
   };

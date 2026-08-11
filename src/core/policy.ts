@@ -32,7 +32,7 @@ import type {
  */
 export function classifyVideo(
   publishedDate: CalendarDate | null,
-  settings: Pick<Settings, "virtualDate">
+  settings: Pick<Settings, "virtualDate"> & Partial<Pick<Settings, "rangeStart">>
 ): Exclude<CardState, "pending"> {
   if (publishedDate === null) return "unknown";
   if (!isValidCalendarDate(publishedDate)) return "unknown";
@@ -41,9 +41,18 @@ export function classifyVideo(
     return "unknown";
   }
 
-  return compareCalendarDates(publishedDate, settings.virtualDate) <= 0
-    ? "visible"
-    : "future";
+  if (compareCalendarDates(publishedDate, settings.virtualDate) > 0) {
+    return "future";
+  }
+
+  // The lower bound is optional, and a malformed one is ignored rather than
+  // hiding everything: an unusable floor should not empty the page.
+  const start = settings.rangeStart;
+  if (start && isValidCalendarDate(start)) {
+    if (compareCalendarDates(publishedDate, start) < 0) return "before";
+  }
+
+  return "visible";
 }
 
 /**
@@ -62,6 +71,8 @@ export function shouldHide(
       return false;
     case "future":
       return true;
+    case "before":
+      return true;
     case "pending":
       return true;
     case "unknown":
@@ -76,7 +87,7 @@ export function shouldHide(
  */
 export function decideCardState(
   publishedDate: CalendarDate | null | undefined,
-  settings: Pick<Settings, "virtualDate">
+  settings: Pick<Settings, "virtualDate"> & Partial<Pick<Settings, "rangeStart">>
 ): CardState {
   if (publishedDate === undefined) return "pending";
   return classifyVideo(publishedDate, settings);

@@ -63,6 +63,7 @@ export function setWatchState(state: WatchState): void {
  */
 export function showBlockOverlay(options: {
   virtualDate: CalendarDate;
+  rangeStart?: CalendarDate | null;
   publishedDate: CalendarDate | null;
   t: Translator;
 }): void {
@@ -78,17 +79,36 @@ export function showBlockOverlay(options: {
     const panel = document.createElement("div");
     panel.className = `${OVERLAY_CLASS}__panel`;
 
+    const start = options.rangeStart ?? null;
+    const isBeforeWindow =
+      start !== null &&
+      options.publishedDate !== null &&
+      options.publishedDate < start;
+
     const title = document.createElement("h1");
     title.className = `${OVERLAY_CLASS}__title`;
     title.textContent =
       options.publishedDate === null
         ? t("block.titleUnknown")
-        : t("block.titleFuture");
+        : isBeforeWindow
+          ? t("block.titleBefore")
+          : t("block.titleFuture");
     panel.appendChild(title);
 
     const rows = document.createElement("dl");
     rows.className = `${OVERLAY_CLASS}__rows`;
-    appendRow(rows, t("block.virtualPresent"), t.date(options.virtualDate));
+
+    if (start === null) {
+      appendRow(rows, t("block.virtualPresent"), t.date(options.virtualDate));
+    } else {
+      // With a period set, "virtual present" alone would not explain why a
+      // video from 2009 was blocked.
+      appendRow(
+        rows,
+        t("block.window"),
+        `${t.date(start)} – ${t.date(options.virtualDate)}`
+      );
+    }
     appendRow(
       rows,
       t("block.published"),

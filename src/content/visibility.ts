@@ -114,6 +114,7 @@ export function countStates(root: ParentNode = document): Record<CardState, numb
     pending: 0,
     visible: 0,
     future: 0,
+    before: 0,
     unknown: 0
   };
 

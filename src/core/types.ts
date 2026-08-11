@@ -45,9 +45,32 @@ export interface Settings {
   /** The virtual present. Videos published after this day are unavailable. */
   virtualDate: CalendarDate;
 
+  /**
+   * Optional start of the window. When set, videos published *before* it are
+   * hidden too, so the timeline is a period rather than "everything up to a
+   * date". `null` means no lower bound.
+   */
+  rangeStart: CalendarDate | null;
+
   unknownPolicy: UnknownPolicy;
 
   showTimelineBadge: boolean;
+
+  /**
+   * Hide parts of YouTube's interface that did not exist at the virtual
+   * present — Shorts, Playables, Podcasts and so on. Filtering videos by date
+   * leaves the surrounding product looking like 2026 regardless.
+   */
+  hideFutureFeatures: boolean;
+
+  /** Feature ids the user has chosen to keep despite being anachronistic. */
+  allowedFeatures: string[];
+
+  /** How many visible videos to aim for before refilling stops. */
+  fillTargetVisible: number;
+
+  /** Upper bound on extra page loads per feed. */
+  fillMaxRounds: number;
 
   /**
    * Keep asking YouTube for more items while filtering leaves a feed nearly
@@ -93,4 +116,4 @@ export interface PublicationResolution {
  * in between discovery and resolution, and it is hidden, so that a future video
  * is never painted before we know what it is.
  */
-export type CardState = "pending" | "visible" | "future" | "unknown";
+export type CardState = "pending" | "visible" | "future" | "before" | "unknown";
