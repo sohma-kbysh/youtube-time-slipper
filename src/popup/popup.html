@@ -14,50 +14,58 @@
       <section class="field">
         <label class="switch">
           <input type="checkbox" id="enabled" />
-          <span class="switch__label">Timeline enabled</span>
+          <span class="switch__label" data-i18n="popup.enabled"></span>
         </label>
       </section>
 
       <section class="field">
-        <label class="field__label" for="virtual-date">Virtual present</label>
+        <label class="field__label" for="virtual-date" data-i18n="popup.virtualPresent"></label>
         <div class="field__row">
           <input type="date" id="virtual-date" min="2005-02-14" />
-          <button type="button" id="today" class="button button--ghost">Today</button>
+          <button type="button" id="today" class="button button--ghost" data-i18n="popup.today"></button>
         </div>
         <p class="field__hint" id="virtual-date-summary"></p>
-        <p class="field__error" id="virtual-date-error" hidden>
-          Enter a valid date.
-        </p>
+        <p class="field__error" id="virtual-date-error" data-i18n="popup.invalidDate" hidden></p>
       </section>
 
       <section class="field">
-        <span class="field__label">Videos with unknown dates</span>
+        <span class="field__label" data-i18n="popup.unknownDates"></span>
         <div class="field__row field__row--radios">
           <label class="radio">
             <input type="radio" name="unknown" value="hide" />
-            <span>Hide</span>
+            <span data-i18n="popup.hide"></span>
           </label>
           <label class="radio">
             <input type="radio" name="unknown" value="show" />
-            <span>Show</span>
+            <span data-i18n="popup.show"></span>
           </label>
         </div>
-        <p class="field__hint">
-          Hiding is stricter: a video whose date cannot be read might be from
-          after your virtual present.
-        </p>
+        <p class="field__hint" data-i18n="popup.unknownHint"></p>
+      </section>
+
+      <section class="field">
+        <label class="switch">
+          <input type="checkbox" id="fill-feed" />
+          <span class="switch__label" data-i18n="popup.fillFeed"></span>
+        </label>
+        <p class="field__hint" data-i18n="popup.fillFeedHint"></p>
       </section>
 
       <details class="field">
-        <summary class="field__summary">Surfaces</summary>
+        <summary class="field__summary" data-i18n="popup.surfaces"></summary>
         <div class="checks" id="surfaces"></div>
       </details>
 
       <section class="field">
         <label class="switch">
           <input type="checkbox" id="badge" />
-          <span class="switch__label">Show timeline badge on YouTube</span>
+          <span class="switch__label" data-i18n="popup.showBadge"></span>
         </label>
+      </section>
+
+      <section class="field">
+        <label class="field__label" for="language" data-i18n="popup.language"></label>
+        <select id="language" class="select"></select>
       </section>
 
       <footer class="panel__footer">

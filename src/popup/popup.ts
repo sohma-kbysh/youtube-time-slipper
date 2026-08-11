@@ -11,11 +11,17 @@
  * permissions failure looked identical.
  */
 
+import { isValidCalendarDate, todayAsCalendarDate } from "../core/date.js";
 import {
-  formatCalendarDateHuman,
-  isValidCalendarDate,
-  todayAsCalendarDate
-} from "../core/date.js";
+  LANGUAGES,
+  LANGUAGE_NAMES,
+  browserLanguages,
+  createTranslator,
+  resolveLanguage,
+  type Language,
+  type MessageKey,
+  type Translator
+} from "../core/i18n.js";
 import type { ConfigurableSurface, Settings } from "../core/types.js";
 import {
   CONFIGURABLE_SURFACES,
@@ -23,14 +29,14 @@ import {
   patchSettings
 } from "../storage/settings.js";
 
-const SURFACE_LABELS: Record<ConfigurableSurface, string> = {
-  home: "Home",
-  search: "Search",
-  watchRelated: "Related",
-  channel: "Channels",
-  subscriptions: "Subscriptions",
-  playlists: "Playlists",
-  shorts: "Shorts"
+const SURFACE_KEYS: Record<ConfigurableSurface, MessageKey> = {
+  home: "popup.surface.home",
+  search: "popup.surface.search",
+  watchRelated: "popup.surface.watchRelated",
+  channel: "popup.surface.channel",
+  subscriptions: "popup.surface.subscriptions",
+  playlists: "popup.surface.playlists",
+  shorts: "popup.surface.shorts"
 };
 
 const enabledInput = required<HTMLInputElement>("#enabled");
@@ -39,8 +45,12 @@ const todayButton = required<HTMLButtonElement>("#today");
 const dateSummary = required<HTMLElement>("#virtual-date-summary");
 const dateError = required<HTMLElement>("#virtual-date-error");
 const badgeInput = required<HTMLInputElement>("#badge");
+const fillFeedInput = required<HTMLInputElement>("#fill-feed");
+const languageSelect = required<HTMLSelectElement>("#language");
 const surfacesContainer = required<HTMLElement>("#surfaces");
 const statusLine = required<HTMLElement>("#status");
+
+let t: Translator = createTranslator("en");
 
 function required<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -65,11 +75,38 @@ function buildSurfaceControls(): void {
     });
 
     const text = document.createElement("span");
-    text.textContent = SURFACE_LABELS[surface];
+    text.dataset["i18n"] = SURFACE_KEYS[surface];
 
     label.append(input, text);
     surfacesContainer.appendChild(label);
   }
+}
+
+function buildLanguageOptions(): void {
+  for (const language of LANGUAGES) {
+    const option = document.createElement("option");
+    option.value = language;
+    // Each language is named in itself, so the list stays usable even when the
+    // current UI language is one the reader cannot read.
+    option.textContent =
+      language === "auto" ? "" : LANGUAGE_NAMES[language];
+    if (language === "auto") option.dataset["i18n"] = "popup.languageAuto";
+    languageSelect.appendChild(option);
+  }
+
+  languageSelect.addEventListener("change", () => {
+    void save({ language: languageSelect.value as Language });
+  });
+}
+
+/** Fill in every element carrying a `data-i18n` key. */
+function applyTranslations(): void {
+  for (const element of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
+    const key = element.dataset["i18n"] as MessageKey | undefined;
+    if (key) element.textContent = t(key);
+  }
+
+  document.documentElement.lang = t.language;
 }
 
 function readSurfaces(): Record<ConfigurableSurface, boolean> {
@@ -82,9 +119,14 @@ function readSurfaces(): Record<ConfigurableSurface, boolean> {
 }
 
 function render(settings: Settings): void {
+  t = createTranslator(resolveLanguage(settings.language, browserLanguages()));
+  applyTranslations();
+
   enabledInput.checked = settings.enabled;
   dateInput.value = settings.virtualDate;
   badgeInput.checked = settings.showTimelineBadge;
+  fillFeedInput.checked = settings.fillFeed;
+  languageSelect.value = settings.language;
 
   for (const input of document.querySelectorAll<HTMLInputElement>(
     "input[name=unknown]"
@@ -98,12 +140,12 @@ function render(settings: Settings): void {
   }
 
   dateSummary.textContent = isValidCalendarDate(settings.virtualDate)
-    ? `Viewing YouTube as of ${formatCalendarDateHuman(settings.virtualDate)}`
+    ? t("popup.viewingAsOf", { date: t.date(settings.virtualDate) })
     : "";
 
   statusLine.textContent = settings.enabled
-    ? `Videos published after ${settings.virtualDate} are hidden.`
-    : "Timeline off — YouTube is unfiltered.";
+    ? t("popup.statusOn", { date: t.date(settings.virtualDate) })
+    : t("popup.statusOff");
   statusLine.classList.toggle("status--active", settings.enabled);
 }
 
@@ -113,9 +155,9 @@ async function save(patch: Partial<Settings>): Promise<void> {
     render(next);
   } catch (error) {
     // Surface the real reason rather than a generic failure string.
-    statusLine.textContent = `Could not save settings: ${
-      error instanceof Error ? error.message : String(error)
-    }`;
+    statusLine.textContent = t("popup.saveError", {
+      message: error instanceof Error ? error.message : String(error)
+    });
     statusLine.classList.remove("status--active");
   }
 }
@@ -127,6 +169,10 @@ function bind(): void {
 
   badgeInput.addEventListener("change", () => {
     void save({ showTimelineBadge: badgeInput.checked });
+  });
+
+  fillFeedInput.addEventListener("change", () => {
+    void save({ fillFeed: fillFeedInput.checked });
   });
 
   dateInput.addEventListener("change", () => {
@@ -163,6 +209,7 @@ function bind(): void {
 
 async function main(): Promise<void> {
   buildSurfaceControls();
+  buildLanguageOptions();
   bind();
 
   // The date picker should not offer days that cannot exist as an upload date.

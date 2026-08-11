@@ -86,6 +86,20 @@ body {
   color: var(--danger);
 }
 
+.select {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 input[type="date"] {
   flex: 1;
   padding: 7px 9px;

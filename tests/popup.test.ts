@@ -161,6 +161,43 @@ describe("popup", () => {
     expect(savedSettings().surfaces.home).toBe(true);
   });
 
+  it("offers every language, each named in its own script", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    const options = [...document.querySelectorAll("#language option")].map(
+      (option) => (option as HTMLOptionElement).value
+    );
+
+    expect(options).toEqual(["auto", "en", "ja", "zh", "ko", "es", "de"]);
+    expect(document.querySelector("#language option[value=ja]")?.textContent).toBe(
+      "日本語"
+    );
+  });
+
+  it("re-renders the whole popup in the chosen language", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    const select = document.querySelector<HTMLSelectElement>("#language")!;
+    select.value = "ja";
+    change(select);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(savedSettings().language).toBe("ja");
+    expect(document.querySelector("#today")?.textContent).toBe("今日");
+    expect(document.querySelector("#status")?.textContent).toContain("2012年8月12日");
+    expect(document.documentElement.lang).toBe("ja");
+  });
+
+  it("persists the feed-filling switch", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12", fillFeed: true });
+
+    input("#fill-feed").checked = false;
+    change(input("#fill-feed"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(savedSettings().fillFeed).toBe(false);
+  });
+
   it("reports a storage failure with its real message", async () => {
     await openPopup({ enabled: true, virtualDate: "2012-08-12" });
 
