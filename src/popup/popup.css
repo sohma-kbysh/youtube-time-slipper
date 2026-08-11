@@ -1,0 +1,161 @@
+:root {
+  color-scheme: dark;
+  --bg: #10131c;
+  --surface: #171b26;
+  --border: #262d3d;
+  --text: #e8ecf5;
+  --muted: #93a0b8;
+  --accent: #7fdfff;
+  --danger: #ff8f8f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 320px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, "Helvetica Neue", "Noto Sans JP", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.panel {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field__label,
+.field__summary {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field__summary {
+  cursor: pointer;
+  outline-offset: 2px;
+}
+
+.field__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field__row--radios {
+  gap: 16px;
+}
+
+.field__hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.field__error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+input[type="date"] {
+  flex: 1;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="date"]:focus-visible,
+.button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.button {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--accent);
+}
+
+.switch,
+.radio,
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.switch__label {
+  font-size: 13px;
+}
+
+.checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  padding-top: 8px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.panel__footer {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.status {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.status--active {
+  color: var(--accent);
+}

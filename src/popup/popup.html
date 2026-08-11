@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>YouTube Time Slipper</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="panel__header">
+        <h1 class="panel__title">YouTube Time Slipper</h1>
+      </header>
+
+      <section class="field">
+        <label class="switch">
+          <input type="checkbox" id="enabled" />
+          <span class="switch__label">Timeline enabled</span>
+        </label>
+      </section>
+
+      <section class="field">
+        <label class="field__label" for="virtual-date">Virtual present</label>
+        <div class="field__row">
+          <input type="date" id="virtual-date" min="2005-02-14" />
+          <button type="button" id="today" class="button button--ghost">Today</button>
+        </div>
+        <p class="field__hint" id="virtual-date-summary"></p>
+        <p class="field__error" id="virtual-date-error" hidden>
+          Enter a valid date.
+        </p>
+      </section>
+
+      <section class="field">
+        <span class="field__label">Videos with unknown dates</span>
+        <div class="field__row field__row--radios">
+          <label class="radio">
+            <input type="radio" name="unknown" value="hide" />
+            <span>Hide</span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="unknown" value="show" />
+            <span>Show</span>
+          </label>
+        </div>
+        <p class="field__hint">
+          Hiding is stricter: a video whose date cannot be read might be from
+          after your virtual present.
+        </p>
+      </section>
+
+      <details class="field">
+        <summary class="field__summary">Surfaces</summary>
+        <div class="checks" id="surfaces"></div>
+      </details>
+
+      <section class="field">
+        <label class="switch">
+          <input type="checkbox" id="badge" />
+          <span class="switch__label">Show timeline badge on YouTube</span>
+        </label>
+      </section>
+
+      <footer class="panel__footer">
+        <p class="status" id="status" role="status"></p>
+      </footer>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
