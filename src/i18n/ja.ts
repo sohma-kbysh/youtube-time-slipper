@@ -37,6 +37,16 @@ export const ja: Catalog = {
   "popup.fillRounds": "1 ページあたりの追加読み込み回数の上限",
   "popup.fillCost":
     "大きくするほど空きが埋まりますが、YouTube へのリクエストも増えます。",
+  "popup.discover": "この時代の動画を探す",
+  "popup.discoverHint":
+    "フィルタだけでは、YouTube が今のあなたに勧める動画の一部しか出せません（いつも見ている動画ばかり出るのはこのためです）。この機能は、期間内の動画を起点に YouTube の関連動画をたどって外側へ探します。Cookie なしで取得するため、結果はパーソナライズされません。",
+  "discover.title": "この時代の他の動画",
+  "discover.subtitle":
+    "期間内の動画を起点に、YouTube の関連動画をたどって見つけました。",
+  "discover.searching": "この時代の動画をさらに探しています…",
+  "discover.none":
+    "この時代の新しい動画はまだ見つかりませんでした。期間を広げるか、その時代の動画を一度開いてから戻ってみてください。",
+  "discover.refresh": "さらに探す",
   "popup.language": "言語",
   "popup.languageAuto": "自動",
   "popup.statusOn": "{date} より後に公開された動画は非表示です。",

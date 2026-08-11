@@ -36,6 +36,15 @@ export const zh: Catalog = {
   "popup.fillTarget": "目标视频数量",
   "popup.fillRounds": "每页最多额外加载次数",
   "popup.fillCost": "数值越大，空页面填充得越满，向 YouTube 发出的请求也越多。",
+  "popup.discover": "寻找这个年代的视频",
+  "popup.discoverHint":
+    "仅靠过滤，只能得到 YouTube 已经推荐给你的那一部分，所以反复出现的总是你常看的视频。此功能改为从时间范围内的视频出发，沿着 YouTube 的相关视频向外查找，并且不带 Cookie，因此结果不会被个性化。",
+  "discover.title": "这个年代的更多视频",
+  "discover.subtitle": "从时间范围内的视频出发，沿着 YouTube 的相关视频找到。",
+  "discover.searching": "正在更远处寻找这个年代的视频…",
+  "discover.none":
+    "暂时没有找到这个年代的新视频。可以放宽时间范围，或先打开一个那个时期的视频再回来。",
+  "discover.refresh": "继续寻找",
   "popup.language": "语言",
   "popup.languageAuto": "自动",
   "popup.statusOn": "发布日期晚于 {date} 的视频已隐藏。",

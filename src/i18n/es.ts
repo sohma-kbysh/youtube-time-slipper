@@ -37,6 +37,16 @@ export const es: Catalog = {
   "popup.fillRounds": "Cargas adicionales máximas por página",
   "popup.fillCost":
     "Valores más altos llenan mejor las páginas vacías y suponen más peticiones a YouTube.",
+  "popup.discover": "Buscar vídeos de esta época",
+  "popup.discoverHint":
+    "Filtrar sólo puede devolver un subconjunto de lo que YouTube ya te recomienda, y por eso reaparecen siempre los mismos vídeos conocidos. Esto recorre el grafo de vídeos relacionados de YouTube partiendo de los que están en tu periodo, sin cookies, así que las sugerencias no están personalizadas.",
+  "discover.title": "Más de esta época",
+  "discover.subtitle":
+    "Encontrados siguiendo los vídeos relacionados de YouTube a partir de los que ya están en tu periodo.",
+  "discover.searching": "Buscando más lejos vídeos de esta época…",
+  "discover.none":
+    "Todavía no se ha encontrado nada nuevo de esta época. Prueba con un periodo más amplio, o abre un vídeo de entonces y vuelve.",
+  "discover.refresh": "Buscar más",
   "popup.language": "Idioma",
   "popup.languageAuto": "Automático",
   "popup.statusOn": "Los vídeos publicados después del {date} están ocultos.",

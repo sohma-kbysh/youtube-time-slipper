@@ -37,6 +37,16 @@ export const de: Catalog = {
   "popup.fillRounds": "Maximale Nachladevorgänge pro Seite",
   "popup.fillCost":
     "Höhere Werte füllen leere Seiten besser und verursachen mehr Anfragen an YouTube.",
+  "popup.discover": "Videos aus dieser Zeit finden",
+  "popup.discoverHint":
+    "Filtern kann immer nur eine Teilmenge dessen liefern, was YouTube dir ohnehin empfiehlt — deshalb erscheinen immer wieder dieselben vertrauten Videos. Dies folgt stattdessen YouTubes Graph ähnlicher Videos nach außen, ausgehend von Videos in deinem Zeitraum und ohne Cookies, sodass die Vorschläge nicht personalisiert sind.",
+  "discover.title": "Mehr aus dieser Zeit",
+  "discover.subtitle":
+    "Gefunden, indem YouTubes ähnlichen Videos ausgehend von deinem Zeitraum gefolgt wurde.",
+  "discover.searching": "Suche weiter draußen nach Videos aus dieser Zeit…",
+  "discover.none":
+    "Noch nichts Neues aus dieser Zeit gefunden. Versuche einen größeren Zeitraum, oder öffne ein Video aus der Zeit und komm zurück.",
+  "discover.refresh": "Mehr finden",
   "popup.language": "Sprache",
   "popup.languageAuto": "Automatisch",
   "popup.statusOn": "Videos, die nach dem {date} veröffentlicht wurden, sind ausgeblendet.",

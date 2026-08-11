@@ -37,6 +37,15 @@ export const ko: Catalog = {
   "popup.fillRounds": "페이지당 최대 추가 로드 횟수",
   "popup.fillCost":
     "값이 클수록 빈 페이지가 잘 채워지지만 YouTube에 보내는 요청도 늘어납니다.",
+  "popup.discover": "이 시대의 동영상 찾기",
+  "popup.discoverHint":
+    "필터링만으로는 YouTube가 이미 추천하는 것의 일부만 남기 때문에, 늘 보던 동영상만 반복해서 나옵니다. 이 기능은 기간 안의 동영상에서 출발해 YouTube의 관련 동영상을 따라 바깥으로 탐색합니다. 쿠키 없이 가져오므로 결과가 개인화되지 않습니다.",
+  "discover.title": "이 시대의 다른 동영상",
+  "discover.subtitle": "기간 안의 동영상에서 출발해 YouTube의 관련 동영상을 따라 찾았습니다.",
+  "discover.searching": "더 멀리서 이 시대의 동영상을 찾는 중…",
+  "discover.none":
+    "아직 이 시대의 새로운 동영상을 찾지 못했습니다. 기간을 넓히거나, 그 시기의 동영상을 한 번 연 뒤 다시 시도해 보세요.",
+  "discover.refresh": "더 찾기",
   "popup.language": "언어",
   "popup.languageAuto": "자동",
   "popup.statusOn": "{date} 이후에 게시된 동영상은 숨겨집니다.",

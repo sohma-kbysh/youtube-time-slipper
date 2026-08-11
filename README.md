@@ -191,6 +191,40 @@ setting cannot turn a tab into an unbounded crawl.
 This never relaxes the filter — it only changes how much material the
 filter is applied to.
 
+## Finding videos the feed never offered
+
+Filtering has a ceiling that no amount of extra loading fixes. YouTube's
+home feed is personalised, so the videos old enough to survive the filter
+are, by construction, the ones you already watch — the page ends up both
+sparse *and* repetitive. Filtering a set can only ever return a subset of
+it.
+
+**Find videos from this era** (on by default) goes outside that set. It
+walks YouTube's own related-video graph: starting from videos already
+inside your window, it asks each one what YouTube considers adjacent to
+it, keeps the answers that also fall inside the window, and repeats — up
+to three steps out. The results appear in a shelf at the top of the feed.
+
+Two things make this work in your favour:
+
+- The pages are fetched **without cookies**, so the related lists are the
+  generic ones rather than yours. The suggestions are adjacent to the
+  *videos*, not to your watch history.
+- One step out from a familiar video is where the unfamiliar begins.
+  Three steps out, confined to a fixed period, is a different corner of
+  YouTube.
+
+It runs only once the ordinary feed has been exhausted, since each
+candidate costs one page fetch (cached afterwards), and it is capped per
+page. Related-video ids and titles are taken from the same page fetch
+that resolves the date, so discovery adds no requests for videos already
+seen.
+
+What this is not: it cannot reconstruct what was actually trending in
+2012. Nothing running in your browser can — that data is not served any
+more. It finds what today's YouTube considers close to the era's videos,
+which is a different and more modest claim.
+
 ## Languages
 
 The interface is available in English, 日本語, 简体中文, 한국어, Español

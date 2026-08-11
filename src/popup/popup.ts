@@ -48,6 +48,7 @@ const rangeClearButton = required<HTMLButtonElement>("#range-clear");
 const fillTargetInput = required<HTMLInputElement>("#fill-target");
 const fillRoundsInput = required<HTMLInputElement>("#fill-rounds");
 const hideFeaturesInput = required<HTMLInputElement>("#hide-future-features");
+const discoverInput = required<HTMLInputElement>("#discover-era");
 const featuresContainer = required<HTMLElement>("#features");
 const dateSummary = required<HTMLElement>("#virtual-date-summary");
 const dateError = required<HTMLElement>("#virtual-date-error");
@@ -202,6 +203,7 @@ function render(settings: Settings): void {
   fillTargetInput.disabled = !settings.fillFeed;
   fillRoundsInput.disabled = !settings.fillFeed;
   hideFeaturesInput.checked = settings.hideFutureFeatures;
+  discoverInput.checked = settings.discoverEra;
   languageSelect.value = settings.language;
 
   renderFeatures(settings);
@@ -256,6 +258,10 @@ function bind(): void {
 
   fillFeedInput.addEventListener("change", () => {
     void save({ fillFeed: fillFeedInput.checked });
+  });
+
+  discoverInput.addEventListener("change", () => {
+    void save({ discoverEra: discoverInput.checked });
   });
 
   hideFeaturesInput.addEventListener("change", () => {

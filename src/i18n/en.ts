@@ -45,6 +45,16 @@ export const en = {
   "popup.fillRounds": "Maximum extra loads per page",
   "popup.fillCost":
     "Higher values fill sparse pages better and cost more requests to YouTube.",
+  "popup.discover": "Find videos from this era",
+  "popup.discoverHint":
+    "Filtering can only ever return a subset of what YouTube already recommends you, which is why the same familiar videos keep appearing. This walks YouTube's related-video graph outward from videos in your window instead, without cookies, so the suggestions are not personalised.",
+  "discover.title": "More from this era",
+  "discover.subtitle":
+    "Found by following YouTube's related videos out from what is already in your window.",
+  "discover.searching": "Looking further out for videos from this era…",
+  "discover.none":
+    "Nothing new found from this era yet. Try a wider window, or open a video from the period and come back.",
+  "discover.refresh": "Find more",
   "popup.language": "Language",
   "popup.languageAuto": "Automatic",
   "popup.statusOn": "Videos published after {date} are hidden.",
