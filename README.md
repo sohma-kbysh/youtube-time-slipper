@@ -26,6 +26,48 @@ a past version of either.
 - Dates are compared as whole calendar dates (`YYYY-MM-DD`), not
   timestamps — see [How it works](#how-it-works).
 
+## A period, not just a cutoff
+
+Setting an optional **earliest date** turns the timeline into a window:
+only videos published between the two dates are shown, and anything
+older is hidden along with anything newer. Both edges are inclusive.
+
+Worth being clear about the trade-off: a period is *stricter* than a
+cutoff, so it makes feeds thinner, not fuller. What it buys is coherence
+— "2010 to 2012" is a recognisable moment in a way that "everything up to
+2012" is not.
+
+## Features that did not exist yet
+
+Filtering videos by date leaves the product itself looking like today: a
+2012 timeline still has a Shorts rail in the sidebar, a Playables entry
+and a topic chip bar. Each of those carries the date it appeared, and is
+removed while the virtual present predates it:
+
+| Feature | Appeared |
+| --- | --- |
+| Live streaming, Movies & TV | 2011 |
+| Trending, YouTube Gaming | 2015 |
+| Community posts | 2016 |
+| Channel memberships, YouTube Music | 2018 |
+| Topic filter chips | 2019 |
+| Shorts, Explore | 2020 |
+| Clips | 2021 |
+| Podcasts, Courses | 2023 |
+| Playables, Hype | 2024 |
+
+The dates are public launch dates, and several rolled out over months or
+by region, so they are approximate by nature — being a few weeks off only
+matters for a cutoff falling very close to a launch. Each feature can be
+individually kept from the popup, and the whole behaviour can be switched
+off.
+
+Matching is done by URL and element name, never by visible text, so it
+works the same whatever language YouTube is displayed in.
+
+This removes what did not exist; it does not rebuild what did. The 2012
+interface is not coming back — see below.
+
 ## What it does not do
 
 This is explicitly **not** a recreation of historical YouTube. v1 does
@@ -133,12 +175,18 @@ along with them — no orphaned headings, "Show less" buttons or blank
 bands. Because today's recommendations are mostly recent, a distant
 virtual present can still empty a feed; with **Keep loading until the
 feed is full** enabled (the default), the extension then asks YouTube
-for more items — up to 25 requests per page, spaced out, stopping early
-once ~20 videos are visible or YouTube stops producing new ones. It only
-moves the viewport while the page is nearly empty, and stops doing so
-once you scroll yourself. If the feed still comes up short, a panel
-explains why and offers a **Load more** button rather than leaving a
-blank screen.
+for more items, stopping early once the target is met or YouTube stops
+producing new ones. It only moves the viewport while the page is nearly
+empty, and stops doing so once you scroll yourself. If the feed still
+comes up short, a panel explains why and offers a **Load more** button
+rather than leaving a blank screen.
+
+Both limits are yours to set: **Videos to aim for** (default 20, up to
+200) and **Maximum extra loads per page** (default 25, up to 300). Raise
+them when a distant virtual present leaves pages sparse — the cost is
+proportionally more requests to YouTube, and a slower page while they
+run. Requests are spaced out and capped per page either way, so the
+setting cannot turn a tab into an unbounded crawl.
 
 This never relaxes the filter — it only changes how much material the
 filter is applied to.
