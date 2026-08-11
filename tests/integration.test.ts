@@ -382,6 +382,8 @@ describe("a feed that filtering empties", () => {
     expect(scrolled).not.toHaveBeenCalled();
     // Shelves are still collapsed: that is tidying, not refilling.
     expect(shelfState("all-future")).toBe("empty");
+    // And the thin page is still explained rather than left blank.
+    expect(document.querySelector(".time-slipper-empty")).not.toBeNull();
   });
 
   it("restores every shelf when the extension is switched off", async () => {

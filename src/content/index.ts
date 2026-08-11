@@ -24,7 +24,7 @@ import { decideCardState, isActive, isSurfaceEnabled } from "../core/policy.js";
 import type { CalendarDate, Settings, VideoId } from "../core/types.js";
 import { defaultSettings, loadSettings, onSettingsChanged } from "../storage/settings.js";
 import { detectPageSurface, readDocumentPublicationMeta } from "./adapters.js";
-import { Backfill } from "./backfill.js";
+import { Backfill, TARGET_VISIBLE } from "./backfill.js";
 import { mountBadge, removeBadge, updateBadge } from "./badge.js";
 import {
   removeEmptyState,
@@ -298,10 +298,15 @@ function refillFeed(): void {
   const stillResolving = requested.size > resolutions.size;
 
   if (!settings.fillFeed || stillResolving) {
-    renderEmptyState(
-      { status: stillResolving ? "loading" : "idle", visible, total, virtualDate: settings.virtualDate },
-      t
-    );
+    // With refilling switched off, a thin page still deserves an explanation —
+    // it just does not get more videos requested for it.
+    const status = stillResolving
+      ? "loading"
+      : visible < TARGET_VISIBLE && total > 0
+        ? "exhausted"
+        : "idle";
+
+    renderEmptyState({ status, visible, total, virtualDate: settings.virtualDate }, t);
     return;
   }
 
