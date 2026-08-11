@@ -6,6 +6,8 @@
  * it is testable in plain Node.
  */
 
+import type { Language } from "./i18n.js";
+
 /** A canonical 11-character YouTube video id, e.g. `dQw4w9WgXcQ`. */
 export type VideoId = string;
 
@@ -46,6 +48,16 @@ export interface Settings {
   unknownPolicy: UnknownPolicy;
 
   showTimelineBadge: boolean;
+
+  /**
+   * Keep asking YouTube for more items while filtering leaves a feed nearly
+   * empty. Without this, a distant virtual present produces a blank page:
+   * today's recommendations are almost all too new to survive the filter.
+   */
+  fillFeed: boolean;
+
+  /** UI language; `auto` follows the browser's preferences. */
+  language: Language;
 
   surfaces: Record<ConfigurableSurface, boolean>;
 }

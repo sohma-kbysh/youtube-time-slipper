@@ -11,6 +11,7 @@
  */
 
 import { isValidCalendarDate, todayAsCalendarDate } from "../core/date.js";
+import { isLanguage } from "../core/i18n.js";
 import type {
   ConfigurableSurface,
   Settings,
@@ -45,6 +46,8 @@ export function defaultSettings(now: Date = new Date()): Settings {
     virtualDate: todayAsCalendarDate(now),
     unknownPolicy: "hide",
     showTimelineBadge: true,
+    fillFeed: true,
+    language: "auto",
     surfaces: {
       home: true,
       search: true,
@@ -101,6 +104,8 @@ export function normalizeSettings(raw: unknown, now: Date = new Date()): Setting
       source["showTimelineBadge"],
       defaults.showTimelineBadge
     ),
+    fillFeed: asBoolean(source["fillFeed"], defaults.fillFeed),
+    language: isLanguage(source["language"]) ? source["language"] : defaults.language,
     surfaces
   };
 }
