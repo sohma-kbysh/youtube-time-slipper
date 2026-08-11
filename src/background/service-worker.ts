@@ -14,14 +14,18 @@
 
 import { debug, warn } from "../core/log.js";
 import {
+  MAX_DISCOVERY_LIMIT,
   MAX_VIDEO_IDS_PER_REQUEST,
+  MESSAGE_ERA_DISCOVERED,
   MESSAGE_RESOLVE_ERROR,
   MESSAGE_VIDEO_DATES_RESOLVED,
+  isDiscoverEraRequest,
   isResolveVideoDatesRequest,
   type ExtensionResponse
 } from "../core/messages.js";
 import type { PublicationResolution, VideoId } from "../core/types.js";
 import { IndexedDbCache, MemoryCache, type PublicationCache } from "./cache.js";
+import { createDiscovery } from "./discovery.js";
 import { FetchQueue } from "./fetch-queue.js";
 import { createResolver } from "./resolver.js";
 
@@ -41,8 +45,14 @@ const resolver = createResolver({
   queue: new FetchQueue()
 });
 
+const discovery = createDiscovery({
+  getWatchData: (videoId) => resolver.getWatchData(videoId)
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!isResolveVideoDatesRequest(message)) return false;
+  const isResolve = isResolveVideoDatesRequest(message);
+  const isDiscover = isDiscoverEraRequest(message);
+  if (!isResolve && !isDiscover) return false;
 
   // Only YouTube tabs may ask. The manifest already restricts injection, but
   // the messaging channel is reachable from any extension page.
@@ -55,25 +65,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  const videoIds = message.videoIds.slice(0, MAX_VIDEO_IDS_PER_REQUEST);
+  const failed = (error: unknown): void => {
+    warn("request failed", error);
+    sendResponse({
+      type: MESSAGE_RESOLVE_ERROR,
+      message: String(error)
+    } satisfies ExtensionResponse);
+  };
 
-  resolver
-    .resolveMany(videoIds)
-    .then((resolutions) => {
+  if (isResolve) {
+    const videoIds = message.videoIds.slice(0, MAX_VIDEO_IDS_PER_REQUEST);
+
+    resolver
+      .resolveMany(videoIds)
+      .then((resolutions) => {
+        sendResponse({
+          type: MESSAGE_VIDEO_DATES_RESOLVED,
+          results: toRecord(resolutions)
+        } satisfies ExtensionResponse);
+      })
+      .catch(failed);
+
+    // Keeps the message channel open for the async reply above.
+    return true;
+  }
+
+  discovery
+    .discover({
+      seeds: message.seeds.slice(0, MAX_VIDEO_IDS_PER_REQUEST),
+      start: message.start,
+      end: message.end,
+      limit: Math.min(message.limit, MAX_DISCOVERY_LIMIT),
+      exclude: message.exclude ?? []
+    })
+    .then((videos) => {
       sendResponse({
-        type: MESSAGE_VIDEO_DATES_RESOLVED,
-        results: toRecord(resolutions)
+        type: MESSAGE_ERA_DISCOVERED,
+        videos: videos.map(({ videoId, title, publishedDate }) => ({
+          videoId,
+          title,
+          publishedDate
+        }))
       } satisfies ExtensionResponse);
     })
-    .catch((error: unknown) => {
-      warn("resolveMany failed", error);
-      sendResponse({
-        type: MESSAGE_RESOLVE_ERROR,
-        message: String(error)
-      } satisfies ExtensionResponse);
-    });
+    .catch(failed);
 
-  // Keeps the message channel open for the async reply above.
   return true;
 });
 

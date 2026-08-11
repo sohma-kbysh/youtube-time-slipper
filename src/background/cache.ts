@@ -29,6 +29,18 @@ export interface CacheRecord {
   /** Which parser produced this. Bumping it invalidates cached unknowns. */
   parserVersion: number;
   fetchedAt: number;
+
+  /** Video title, when the page was read. Used by the discovery shelf. */
+  title?: string | null;
+
+  /**
+   * Related video ids from the same page read.
+   *
+   * `undefined` means "this record predates related-id extraction", which is
+   * different from `[]` ("the page had none"): the first is worth re-fetching
+   * for discovery, the second is not.
+   */
+  related?: VideoId[];
 }
 
 export interface PublicationCache {

@@ -23,7 +23,9 @@ import type {
 } from "../core/types.js";
 import { isValidVideoId } from "../content/video-id.js";
 import { isUsable, type CacheRecord, type PublicationCache } from "./cache.js";
+import type { WatchData } from "./discovery.js";
 import { FetchQueue } from "./fetch-queue.js";
+import { parseWatchPageContent } from "./watch-page.js";
 
 /**
  * Bump whenever the extraction below changes.
@@ -32,7 +34,7 @@ import { FetchQueue } from "./fetch-queue.js";
  * every video the old parser failed on eligible for another attempt, while
  * successfully resolved dates stay cached.
  */
-export const PARSER_VERSION = 1;
+export const PARSER_VERSION = 2;
 
 export const FETCH_TIMEOUT_MS = 10_000;
 
@@ -123,6 +125,12 @@ export interface Resolver {
   resolveMany(
     videoIds: VideoId[]
   ): Promise<Map<VideoId, PublicationResolution>>;
+  /**
+   * Everything the discovery walk needs about a video: its date, its title and
+   * the videos YouTube considers adjacent to it. Served from cache when the
+   * cached record was written by a version that stored related ids.
+   */
+  getWatchData(videoId: VideoId): Promise<WatchData>;
 }
 
 export function createResolver(deps: ResolverDependencies): Resolver {
@@ -139,6 +147,14 @@ export function createResolver(deps: ResolverDependencies): Resolver {
    * own fetch of the same document.
    */
   const inFlight = new Map<VideoId, Promise<PublicationResolution>>();
+
+  /**
+   * Titles and related ids from pages read during this worker's lifetime.
+   *
+   * The cache is the durable copy; this avoids a second IndexedDB round trip
+   * for a page that was just fetched, which is the common case during a walk.
+   */
+  const lastWatchData = new Map<VideoId, WatchData>();
 
   function unknownResolution(videoId: VideoId): PublicationResolution {
     return {
@@ -188,6 +204,8 @@ export function createResolver(deps: ResolverDependencies): Resolver {
   ): Promise<PublicationResolution> {
     let source: ResolutionSource = "unknown";
     let date: string | null = null;
+    let title: string | null = null;
+    let related: VideoId[] = [];
 
     try {
       // Cookie-less first: reading a public upload date does not need the
@@ -211,6 +229,14 @@ export function createResolver(deps: ResolverDependencies): Resolver {
       } else {
         debug(`unresolved ${videoId}: no publication metadata`);
       }
+
+      // The title and the related-video ids come out of the page we already
+      // fetched, so discovery costs no extra requests.
+      if (html) {
+        const content = parseWatchPageContent(html, videoId);
+        title = content.title;
+        related = content.related;
+      }
     } catch (error) {
       // Network failure, timeout, abort: all become unknown, which the policy
       // layer treats as "not proven to be in the past".
@@ -222,8 +248,17 @@ export function createResolver(deps: ResolverDependencies): Resolver {
       publishedDate: date,
       source,
       parserVersion: PARSER_VERSION,
-      fetchedAt: now()
+      fetchedAt: now(),
+      title,
+      related
     };
+
+    lastWatchData.set(videoId, {
+      videoId,
+      publishedDate: date,
+      title,
+      related
+    });
 
     try {
       await cache.put(record);
@@ -315,5 +350,43 @@ export function createResolver(deps: ResolverDependencies): Resolver {
     return results;
   }
 
-  return { resolve, resolveMany };
+  /**
+   * Resolve a video *with* its related ids.
+   *
+   * A cached record from before related-id extraction has `related` undefined;
+   * that is treated as a miss so the walk can proceed, while a record with an
+   * empty array is taken at face value.
+   */
+  async function getWatchData(videoId: VideoId): Promise<WatchData> {
+    const empty: WatchData = {
+      videoId,
+      publishedDate: null,
+      title: null,
+      related: []
+    };
+
+    if (!isValidVideoId(videoId)) return empty;
+
+    const remembered = lastWatchData.get(videoId);
+    if (remembered) return remembered;
+
+    const cached = await cache.getMany([videoId]).catch(() => new Map());
+    const record = cached.get(videoId) as CacheRecord | undefined;
+
+    if (record?.related !== undefined && isUsable(record, PARSER_VERSION, now())) {
+      const data: WatchData = {
+        videoId,
+        publishedDate: record.publishedDate,
+        title: record.title ?? null,
+        related: record.related
+      };
+      lastWatchData.set(videoId, data);
+      return data;
+    }
+
+    await startResolution(videoId, -50);
+    return lastWatchData.get(videoId) ?? empty;
+  }
+
+  return { resolve, resolveMany, getWatchData };
 }
