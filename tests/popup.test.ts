@@ -198,6 +198,90 @@ describe("popup", () => {
     expect(savedSettings().fillFeed).toBe(false);
   });
 
+  it("persists a period and summarises it", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    input("#range-start").value = "2010-01-01";
+    change(input("#range-start"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(savedSettings().rangeStart).toBe("2010-01-01");
+    expect(document.querySelector("#virtual-date-summary")?.textContent).toContain(
+      "1 January 2010"
+    );
+  });
+
+  it("clears the period", async () => {
+    await openPopup({
+      enabled: true,
+      virtualDate: "2012-08-12",
+      rangeStart: "2010-01-01"
+    });
+
+    document.querySelector<HTMLButtonElement>("#range-clear")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(savedSettings().rangeStart).toBeNull();
+    expect(input("#range-start").value).toBe("");
+  });
+
+  it("lists only the features that postdate the virtual present", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    const listed = [...document.querySelectorAll("#features input")].map(
+      (element) => (element as HTMLInputElement).dataset["feature"]
+    );
+
+    expect(listed).toContain("shorts");
+    expect(listed).toContain("playables");
+    expect(listed).not.toContain("liveStreaming");
+  });
+
+  it("lets a single feature be kept", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    const shorts = input('#features input[data-feature="shorts"]');
+    expect(shorts.checked).toBe(true);
+
+    shorts.checked = false;
+    change(shorts);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(savedSettings().allowedFeatures).toEqual(["shorts"]);
+  });
+
+  it("says so when nothing on the list is anachronistic", async () => {
+    await openPopup({ enabled: true, virtualDate: "2026-08-12" });
+
+    expect(document.querySelectorAll("#features input")).toHaveLength(0);
+    expect(document.querySelector("#features")?.textContent).toContain("already existed");
+  });
+
+  it("persists the refill limits", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    input("#fill-target").value = "60";
+    change(input("#fill-target"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    input("#fill-rounds").value = "120";
+    change(input("#fill-rounds"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(savedSettings().fillTargetVisible).toBe(60);
+    expect(savedSettings().fillMaxRounds).toBe(120);
+  });
+
+  it("clamps an out-of-range refill limit rather than storing it", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    input("#fill-rounds").value = "99999";
+    change(input("#fill-rounds"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(savedSettings().fillMaxRounds).toBe(300);
+  });
+
   it("reports a storage failure with its real message", async () => {
     await openPopup({ enabled: true, virtualDate: "2012-08-12" });
 

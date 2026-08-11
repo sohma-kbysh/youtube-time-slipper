@@ -23,6 +23,7 @@ import {
   type Translator
 } from "../core/i18n.js";
 import type { ConfigurableSurface, Settings } from "../core/types.js";
+import { ERA_FEATURES } from "../content/era.js";
 import {
   CONFIGURABLE_SURFACES,
   loadSettings,
@@ -42,6 +43,12 @@ const SURFACE_KEYS: Record<ConfigurableSurface, MessageKey> = {
 const enabledInput = required<HTMLInputElement>("#enabled");
 const dateInput = required<HTMLInputElement>("#virtual-date");
 const todayButton = required<HTMLButtonElement>("#today");
+const rangeStartInput = required<HTMLInputElement>("#range-start");
+const rangeClearButton = required<HTMLButtonElement>("#range-clear");
+const fillTargetInput = required<HTMLInputElement>("#fill-target");
+const fillRoundsInput = required<HTMLInputElement>("#fill-rounds");
+const hideFeaturesInput = required<HTMLInputElement>("#hide-future-features");
+const featuresContainer = required<HTMLElement>("#features");
 const dateSummary = required<HTMLElement>("#virtual-date-summary");
 const dateError = required<HTMLElement>("#virtual-date-error");
 const badgeInput = required<HTMLInputElement>("#badge");
@@ -118,15 +125,86 @@ function readSurfaces(): Record<ConfigurableSurface, boolean> {
   return surfaces;
 }
 
+/**
+ * List the features that postdate the virtual present, each with the date it
+ * appeared. Ticked means hidden; unticking keeps that one feature.
+ *
+ * Product names are shown as YouTube writes them, untranslated — "Shorts" and
+ * "Playables" are the same word in every locale YouTube ships.
+ */
+function renderFeatures(settings: Settings): void {
+  featuresContainer.textContent = "";
+
+  const anachronistic = ERA_FEATURES.filter(
+    (feature) => feature.since > settings.virtualDate
+  );
+
+  if (anachronistic.length === 0) {
+    const note = document.createElement("p");
+    note.className = "field__hint";
+    note.textContent = t("popup.featuresNone", { date: t.date(settings.virtualDate) });
+    featuresContainer.appendChild(note);
+    return;
+  }
+
+  const allowed = new Set(settings.allowedFeatures);
+
+  for (const feature of anachronistic) {
+    const label = document.createElement("label");
+    label.className = "check";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.dataset["feature"] = feature.id;
+    input.checked = !allowed.has(feature.id);
+    input.disabled = !settings.hideFutureFeatures;
+    input.addEventListener("change", () => {
+      void save({ allowedFeatures: readAllowedFeatures() });
+    });
+
+    const text = document.createElement("span");
+    text.textContent = feature.label;
+
+    const since = document.createElement("span");
+    since.className = "check__meta";
+    since.textContent = t("popup.featureSince", { date: feature.since });
+
+    label.append(input, text, since);
+    featuresContainer.appendChild(label);
+  }
+}
+
+function readAllowedFeatures(): string[] {
+  const allowed: string[] = [];
+
+  for (const input of featuresContainer.querySelectorAll<HTMLInputElement>(
+    "input[type=checkbox]"
+  )) {
+    const id = input.dataset["feature"];
+    if (id && !input.checked) allowed.push(id);
+  }
+
+  return allowed;
+}
+
 function render(settings: Settings): void {
   t = createTranslator(resolveLanguage(settings.language, browserLanguages()));
   applyTranslations();
 
   enabledInput.checked = settings.enabled;
   dateInput.value = settings.virtualDate;
+  rangeStartInput.value = settings.rangeStart ?? "";
+  rangeStartInput.max = settings.virtualDate;
   badgeInput.checked = settings.showTimelineBadge;
   fillFeedInput.checked = settings.fillFeed;
+  fillTargetInput.value = String(settings.fillTargetVisible);
+  fillRoundsInput.value = String(settings.fillMaxRounds);
+  fillTargetInput.disabled = !settings.fillFeed;
+  fillRoundsInput.disabled = !settings.fillFeed;
+  hideFeaturesInput.checked = settings.hideFutureFeatures;
   languageSelect.value = settings.language;
+
+  renderFeatures(settings);
 
   for (const input of document.querySelectorAll<HTMLInputElement>(
     "input[name=unknown]"
@@ -139,9 +217,14 @@ function render(settings: Settings): void {
     if (surface) input.checked = settings.surfaces[surface];
   }
 
-  dateSummary.textContent = isValidCalendarDate(settings.virtualDate)
-    ? t("popup.viewingAsOf", { date: t.date(settings.virtualDate) })
-    : "";
+  dateSummary.textContent = !isValidCalendarDate(settings.virtualDate)
+    ? ""
+    : settings.rangeStart
+      ? t("popup.rangeSummary", {
+          start: t.date(settings.rangeStart),
+          end: t.date(settings.virtualDate)
+        })
+      : t("popup.viewingAsOf", { date: t.date(settings.virtualDate) });
 
   statusLine.textContent = settings.enabled
     ? t("popup.statusOn", { date: t.date(settings.virtualDate) })
@@ -173,6 +256,42 @@ function bind(): void {
 
   fillFeedInput.addEventListener("change", () => {
     void save({ fillFeed: fillFeedInput.checked });
+  });
+
+  hideFeaturesInput.addEventListener("change", () => {
+    void save({ hideFutureFeatures: hideFeaturesInput.checked });
+  });
+
+  // Out-of-range or empty numbers are normalised on the way into storage, so
+  // the field cannot be left in a state that disables refilling by accident.
+  fillTargetInput.addEventListener("change", () => {
+    void save({ fillTargetVisible: Number(fillTargetInput.value) });
+  });
+
+  fillRoundsInput.addEventListener("change", () => {
+    void save({ fillMaxRounds: Number(fillRoundsInput.value) });
+  });
+
+  rangeStartInput.addEventListener("change", () => {
+    const value = rangeStartInput.value;
+
+    if (value === "") {
+      void save({ rangeStart: null });
+      return;
+    }
+
+    if (!isValidCalendarDate(value)) {
+      dateError.hidden = false;
+      return;
+    }
+
+    dateError.hidden = true;
+    void save({ rangeStart: value });
+  });
+
+  rangeClearButton.addEventListener("click", () => {
+    rangeStartInput.value = "";
+    void save({ rangeStart: null });
   });
 
   dateInput.addEventListener("change", () => {

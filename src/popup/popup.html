@@ -29,6 +29,15 @@
       </section>
 
       <section class="field">
+        <label class="field__label" for="range-start" data-i18n="popup.rangeStart"></label>
+        <div class="field__row">
+          <input type="date" id="range-start" min="2005-02-14" />
+          <button type="button" id="range-clear" class="button button--ghost" data-i18n="popup.rangeClear"></button>
+        </div>
+        <p class="field__hint" data-i18n="popup.rangeStartHint"></p>
+      </section>
+
+      <section class="field">
         <span class="field__label" data-i18n="popup.unknownDates"></span>
         <div class="field__row field__row--radios">
           <label class="radio">
@@ -49,7 +58,29 @@
           <span class="switch__label" data-i18n="popup.fillFeed"></span>
         </label>
         <p class="field__hint" data-i18n="popup.fillFeedHint"></p>
+
+        <div class="field__row field__row--numbers">
+          <label class="number">
+            <span class="number__label" data-i18n="popup.fillTarget"></span>
+            <input type="number" id="fill-target" min="5" max="200" step="1" />
+          </label>
+          <label class="number">
+            <span class="number__label" data-i18n="popup.fillRounds"></span>
+            <input type="number" id="fill-rounds" min="1" max="300" step="1" />
+          </label>
+        </div>
+        <p class="field__hint" data-i18n="popup.fillCost"></p>
       </section>
+
+      <details class="field">
+        <summary class="field__summary" data-i18n="popup.features"></summary>
+        <label class="switch switch--indented">
+          <input type="checkbox" id="hide-future-features" />
+          <span class="switch__label" data-i18n="popup.hideFutureFeatures"></span>
+        </label>
+        <p class="field__hint" data-i18n="popup.featuresHint"></p>
+        <div class="checks checks--single" id="features"></div>
+      </details>
 
       <details class="field">
         <summary class="field__summary" data-i18n="popup.surfaces"></summary>

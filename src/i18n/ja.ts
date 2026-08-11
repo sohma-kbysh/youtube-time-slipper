@@ -22,6 +22,21 @@ export const ja: Catalog = {
   "popup.fillFeed": "フィードが埋まるまで読み込み続ける",
   "popup.fillFeedHint":
     "フィルタの結果ページがほぼ空になったとき、YouTube に追加の動画を要求します。",
+  "popup.rangeStart": "開始日（任意）",
+  "popup.rangeStartHint":
+    "設定すると、仮想の現在までの全期間ではなく、指定した期間だけを閲覧できます。開始日より前の動画も非表示になります。",
+  "popup.rangeClear": "クリア",
+  "popup.rangeSummary": "{start} 〜 {end} を表示中",
+  "popup.features": "時代に合わない機能",
+  "popup.hideFutureFeatures": "当時なかった機能を隠す",
+  "popup.featuresHint":
+    "仮想の現在より後に登場した YouTube の機能（Shorts、Playables、ポッドキャストなど）を取り除きます。チェックを外すと残せます。",
+  "popup.featuresNone": "この一覧の機能は、すべて {date} の時点で存在していました。",
+  "popup.featureSince": "{date} 開始",
+  "popup.fillTarget": "目標の表示本数",
+  "popup.fillRounds": "1 ページあたりの追加読み込み回数の上限",
+  "popup.fillCost":
+    "大きくするほど空きが埋まりますが、YouTube へのリクエストも増えます。",
   "popup.language": "言語",
   "popup.languageAuto": "自動",
   "popup.statusOn": "{date} より後に公開された動画は非表示です。",
@@ -32,6 +47,8 @@ export const ja: Catalog = {
   "badge.tooltip": "{date} 以前に公開された動画のみを表示中",
 
   "block.titleFuture": "この動画はまだ存在しません。",
+  "block.titleBefore": "この動画は設定した期間の外にあります。",
+  "block.window": "期間",
   "block.titleUnknown": "この動画の公開日が分かりません。",
   "block.virtualPresent": "仮想の現在",
   "block.published": "公開日",

@@ -30,6 +30,21 @@ export const en = {
   "popup.fillFeed": "Keep loading until the feed is full",
   "popup.fillFeedHint":
     "Asks YouTube for more videos when filtering leaves the page nearly empty.",
+  "popup.rangeStart": "Earliest date (optional)",
+  "popup.rangeStartHint":
+    "Set this to browse a period instead of everything up to your virtual present. Videos published before it are hidden too.",
+  "popup.rangeClear": "Clear",
+  "popup.rangeSummary": "Showing {start} to {end}",
+  "popup.features": "Era features",
+  "popup.hideFutureFeatures": "Hide features that did not exist yet",
+  "popup.featuresHint":
+    "Removes parts of YouTube — Shorts, Playables, Podcasts and so on — that launched after your virtual present. Untick one to keep it.",
+  "popup.featuresNone": "Everything on this list already existed on {date}.",
+  "popup.featureSince": "since {date}",
+  "popup.fillTarget": "Videos to aim for",
+  "popup.fillRounds": "Maximum extra loads per page",
+  "popup.fillCost":
+    "Higher values fill sparse pages better and cost more requests to YouTube.",
   "popup.language": "Language",
   "popup.languageAuto": "Automatic",
   "popup.statusOn": "Videos published after {date} are hidden.",
@@ -40,6 +55,8 @@ export const en = {
   "badge.tooltip": "Showing videos published on or before {date}",
 
   "block.titleFuture": "This video does not exist yet.",
+  "block.titleBefore": "This video is outside your window.",
+  "block.window": "Window",
   "block.titleUnknown": "This video has no known place in your timeline.",
   "block.virtualPresent": "Virtual present",
   "block.published": "Published",

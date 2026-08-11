@@ -22,6 +22,21 @@ export const ko: Catalog = {
   "popup.fillFeed": "피드가 찰 때까지 계속 불러오기",
   "popup.fillFeedHint":
     "필터링 후 페이지가 거의 비었을 때 YouTube에 동영상을 더 요청합니다.",
+  "popup.rangeStart": "시작일 (선택)",
+  "popup.rangeStartHint":
+    "설정하면 가상의 현재까지 전부가 아니라 특정 기간만 볼 수 있습니다. 시작일보다 이전에 게시된 동영상도 숨겨집니다.",
+  "popup.rangeClear": "지우기",
+  "popup.rangeSummary": "{start} ~ {end} 표시 중",
+  "popup.features": "시대에 맞지 않는 기능",
+  "popup.hideFutureFeatures": "당시에 없던 기능 숨기기",
+  "popup.featuresHint":
+    "가상의 현재 이후에 나온 YouTube 기능(Shorts, Playables, 팟캐스트 등)을 제거합니다. 체크를 해제하면 남겨 둘 수 있습니다.",
+  "popup.featuresNone": "이 목록의 기능은 {date} 시점에 모두 있었습니다.",
+  "popup.featureSince": "{date} 시작",
+  "popup.fillTarget": "목표 동영상 수",
+  "popup.fillRounds": "페이지당 최대 추가 로드 횟수",
+  "popup.fillCost":
+    "값이 클수록 빈 페이지가 잘 채워지지만 YouTube에 보내는 요청도 늘어납니다.",
   "popup.language": "언어",
   "popup.languageAuto": "자동",
   "popup.statusOn": "{date} 이후에 게시된 동영상은 숨겨집니다.",
@@ -32,6 +47,8 @@ export const ko: Catalog = {
   "badge.tooltip": "{date} 이전에 게시된 동영상만 표시 중",
 
   "block.titleFuture": "이 동영상은 아직 존재하지 않습니다.",
+  "block.titleBefore": "이 동영상은 설정한 기간 밖에 있습니다.",
+  "block.window": "기간",
   "block.titleUnknown": "이 동영상이 타임라인의 어디에 속하는지 알 수 없습니다.",
   "block.virtualPresent": "가상의 현재",
   "block.published": "게시일",

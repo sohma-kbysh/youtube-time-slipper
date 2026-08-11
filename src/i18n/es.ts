@@ -22,6 +22,21 @@ export const es: Catalog = {
   "popup.fillFeed": "Seguir cargando hasta llenar la página",
   "popup.fillFeedHint":
     "Pide más vídeos a YouTube cuando el filtrado deja la página casi vacía.",
+  "popup.rangeStart": "Fecha inicial (opcional)",
+  "popup.rangeStartHint":
+    "Úsala para navegar por un periodo en lugar de todo lo anterior a tu presente virtual. Los vídeos publicados antes también se ocultan.",
+  "popup.rangeClear": "Borrar",
+  "popup.rangeSummary": "Mostrando del {start} al {end}",
+  "popup.features": "Funciones de la época",
+  "popup.hideFutureFeatures": "Ocultar funciones que aún no existían",
+  "popup.featuresHint":
+    "Quita partes de YouTube — Shorts, Playables, Podcasts y demás — que aparecieron después de tu presente virtual. Desmarca una para conservarla.",
+  "popup.featuresNone": "Todo lo de esta lista ya existía el {date}.",
+  "popup.featureSince": "desde el {date}",
+  "popup.fillTarget": "Vídeos que se intentarán mostrar",
+  "popup.fillRounds": "Cargas adicionales máximas por página",
+  "popup.fillCost":
+    "Valores más altos llenan mejor las páginas vacías y suponen más peticiones a YouTube.",
   "popup.language": "Idioma",
   "popup.languageAuto": "Automático",
   "popup.statusOn": "Los vídeos publicados después del {date} están ocultos.",
@@ -32,6 +47,8 @@ export const es: Catalog = {
   "badge.tooltip": "Mostrando vídeos publicados el {date} o antes",
 
   "block.titleFuture": "Este vídeo todavía no existe.",
+  "block.titleBefore": "Este vídeo queda fuera de tu periodo.",
+  "block.window": "Periodo",
   "block.titleUnknown": "Este vídeo no tiene un lugar conocido en tu línea temporal.",
   "block.virtualPresent": "Presente virtual",
   "block.published": "Publicado",

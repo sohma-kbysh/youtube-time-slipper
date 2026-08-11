@@ -22,6 +22,21 @@ export const de: Catalog = {
   "popup.fillFeed": "Weiter laden, bis die Seite gefüllt ist",
   "popup.fillFeedHint":
     "Fordert weitere Videos von YouTube an, wenn die Seite nach dem Filtern fast leer ist.",
+  "popup.rangeStart": "Startdatum (optional)",
+  "popup.rangeStartHint":
+    "Damit siehst du einen Zeitraum statt alles bis zu deiner virtuellen Gegenwart. Videos von davor werden ebenfalls ausgeblendet.",
+  "popup.rangeClear": "Löschen",
+  "popup.rangeSummary": "Zeigt {start} bis {end}",
+  "popup.features": "Funktionen der Epoche",
+  "popup.hideFutureFeatures": "Funktionen ausblenden, die es noch nicht gab",
+  "popup.featuresHint":
+    "Entfernt Teile von YouTube – Shorts, Playables, Podcasts und andere –, die nach deiner virtuellen Gegenwart erschienen sind. Häkchen entfernen, um eine zu behalten.",
+  "popup.featuresNone": "Alles in dieser Liste gab es am {date} bereits.",
+  "popup.featureSince": "seit {date}",
+  "popup.fillTarget": "Angestrebte Anzahl Videos",
+  "popup.fillRounds": "Maximale Nachladevorgänge pro Seite",
+  "popup.fillCost":
+    "Höhere Werte füllen leere Seiten besser und verursachen mehr Anfragen an YouTube.",
   "popup.language": "Sprache",
   "popup.languageAuto": "Automatisch",
   "popup.statusOn": "Videos, die nach dem {date} veröffentlicht wurden, sind ausgeblendet.",
@@ -32,6 +47,8 @@ export const de: Catalog = {
   "badge.tooltip": "Zeigt Videos, die am {date} oder früher veröffentlicht wurden",
 
   "block.titleFuture": "Dieses Video gibt es noch nicht.",
+  "block.titleBefore": "Dieses Video liegt außerhalb deines Zeitraums.",
+  "block.window": "Zeitraum",
   "block.titleUnknown": "Dieses Video hat keinen bekannten Platz in deiner Zeitleiste.",
   "block.virtualPresent": "Virtuelle Gegenwart",
   "block.published": "Veröffentlicht",

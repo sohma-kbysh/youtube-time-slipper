@@ -152,6 +152,55 @@ input:focus-visible {
   padding-top: 8px;
 }
 
+.checks--single {
+  grid-template-columns: 1fr;
+}
+
+.check__meta {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.switch--indented {
+  margin-top: 8px;
+}
+
+.field__row--numbers {
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.number {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.number__label {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+input[type="number"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+input:disabled,
+input:disabled + span {
+  opacity: 0.45;
+}
+
 input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--accent);
