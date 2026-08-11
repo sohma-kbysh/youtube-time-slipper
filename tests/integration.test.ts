@@ -12,7 +12,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  MESSAGE_DISCOVER_ERA,
+  MESSAGE_ERA_DISCOVERED,
   MESSAGE_VIDEO_DATES_RESOLVED,
+  type ExtensionRequest,
   type ResolveVideoDatesRequest
 } from "../src/core/messages";
 import type { PublicationResolution, Settings, VideoId } from "../src/core/types";
@@ -40,10 +43,30 @@ function installChromeStub(initial: Partial<Settings>): void {
   storage = { settings: initial };
   storageListeners = [];
 
-  sendMessage = vi.fn(async (message: ResolveVideoDatesRequest) => {
+  // The stub answers both request types, so it is typed as the union the
+  // content script actually sends.
+  sendMessage = vi.fn(async (request: ExtensionRequest) => {
+    if (request.type === MESSAGE_DISCOVER_ERA) {
+      return {
+        type: MESSAGE_ERA_DISCOVERED,
+        videos: [
+          {
+            videoId: "DDDDDDDDDDD",
+            title: "A video from the era",
+            publishedDate: "2009-07-07"
+          },
+          {
+            videoId: "EEEEEEEEEEE",
+            title: "Another from the era",
+            publishedDate: "2011-02-02"
+          }
+        ]
+      };
+    }
+
     const results: Record<VideoId, PublicationResolution> = {};
 
-    for (const videoId of message.videoIds) {
+    for (const videoId of request.videoIds) {
       results[videoId] = {
         videoId,
         publishedDate: DATES[videoId] ?? null,
@@ -491,6 +514,92 @@ describe("a period rather than a cutoff", () => {
     await updateSettings({ rangeStart: null });
 
     expect(stateOf("old")).toBe("visible");
+  });
+});
+
+/**
+ * The complaint this answers: filtering a personalised feed returns only the
+ * videos the user already watches, so the page is both empty and repetitive.
+ * Discovery goes outside that feed.
+ */
+describe("finding videos outside what YouTube recommended", () => {
+  function sparseFeed(): string {
+    return `
+      <div id="contents">
+        <ytd-rich-item-renderer id="old">
+          <a href="/watch?v=${OLD_VIDEO}">old</a>
+        </ytd-rich-item-renderer>
+        <ytd-rich-item-renderer id="new">
+          <a href="/watch?v=${NEW_VIDEO}">new</a>
+        </ytd-rich-item-renderer>
+      </div>
+    `;
+  }
+
+  function discoveryRequests() {
+    return sendMessage.mock.calls
+      .map((call) => call[0] as { type: string; seeds?: string[]; exclude?: string[] })
+      .filter((message) => message.type === MESSAGE_DISCOVER_ERA);
+  }
+
+  it("shows era videos that were never in the feed", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12", fillFeed: false, discoverEra: true },
+      sparseFeed()
+    );
+
+    const cards = document.querySelectorAll(".time-slipper-discover__card");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]?.textContent).toContain("A video from the era");
+    expect(cards[0]?.getAttribute("href")).toBe("/watch?v=DDDDDDDDDDD");
+  });
+
+  it("walks out from videos that are inside the window", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12", fillFeed: false, discoverEra: true },
+      sparseFeed()
+    );
+
+    const [request] = discoveryRequests();
+    expect(request?.seeds).toEqual([OLD_VIDEO]);
+    // Videos already on the page would not be a discovery.
+    expect(request?.exclude).toContain(NEW_VIDEO);
+  });
+
+  it("does not run when switched off", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12", fillFeed: false, discoverEra: false },
+      sparseFeed()
+    );
+
+    expect(discoveryRequests()).toHaveLength(0);
+    expect(document.querySelector(".time-slipper-discover")).toBeNull();
+  });
+
+  it("asks only once per page", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12", fillFeed: false, discoverEra: true },
+      sparseFeed()
+    );
+
+    // The mutation observer fires repeatedly; the walk is expensive and must
+    // not restart on every scan.
+    document.querySelector("#contents")!.appendChild(document.createElement("div"));
+    await settle();
+
+    expect(discoveryRequests()).toHaveLength(1);
+  });
+
+  it("removes the shelf when the extension is switched off", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12", fillFeed: false, discoverEra: true },
+      sparseFeed()
+    );
+    expect(document.querySelector(".time-slipper-discover")).not.toBeNull();
+
+    await updateSettings({ enabled: false });
+
+    expect(document.querySelector(".time-slipper-discover")).toBeNull();
   });
 });
 

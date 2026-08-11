@@ -75,6 +75,7 @@ export function defaultSettings(now: Date = new Date()): Settings {
     fillFeed: true,
     fillTargetVisible: DEFAULT_FILL_TARGET,
     fillMaxRounds: DEFAULT_FILL_ROUNDS,
+    discoverEra: true,
     language: "auto",
     surfaces: {
       home: true,
@@ -176,6 +177,7 @@ export function normalizeSettings(raw: unknown, now: Date = new Date()): Setting
       MIN_FILL_ROUNDS,
       MAX_FILL_ROUNDS
     ),
+    discoverEra: asBoolean(source["discoverEra"], defaults.discoverEra),
     language: isLanguage(source["language"]) ? source["language"] : defaults.language,
     surfaces
   };

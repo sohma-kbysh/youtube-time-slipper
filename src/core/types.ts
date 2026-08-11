@@ -73,6 +73,12 @@ export interface Settings {
   fillMaxRounds: number;
 
   /**
+   * Look for era videos beyond what YouTube recommends, by walking its
+   * related-video graph outward from videos already inside the window.
+   */
+  discoverEra: boolean;
+
+  /**
    * Keep asking YouTube for more items while filtering leaves a feed nearly
    * empty. Without this, a distant virtual present produces a blank page:
    * today's recommendations are almost all too new to survive the filter.

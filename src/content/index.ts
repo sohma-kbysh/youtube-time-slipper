@@ -17,7 +17,9 @@ import {
 import { debug, warn } from "../core/log.js";
 import {
   MAX_VIDEO_IDS_PER_REQUEST,
+  MESSAGE_DISCOVER_ERA,
   MESSAGE_RESOLVE_VIDEO_DATES,
+  isEraDiscoveredResponse,
   isVideoDatesResolvedResponse
 } from "../core/messages.js";
 import { decideCardState, isActive, isSurfaceEnabled } from "../core/policy.js";
@@ -25,6 +27,11 @@ import type { CalendarDate, Settings, VideoId } from "../core/types.js";
 import { defaultSettings, loadSettings, onSettingsChanged } from "../storage/settings.js";
 import { detectPageSurface, readDocumentPublicationMeta } from "./adapters.js";
 import { Backfill } from "./backfill.js";
+import {
+  removeDiscovery,
+  renderDiscovery,
+  setDiscoverRefreshHandler
+} from "./discover.js";
 import { applyEraFeatures, resetEraFeatures } from "./era.js";
 import { mountBadge, removeBadge, updateBadge } from "./badge.js";
 import {
@@ -92,6 +99,12 @@ const backfill = new Backfill();
  * for them, and refilling continues only when they ask for it.
  */
 let userHasScrolled = false;
+
+/** How many discovered videos to ask for. */
+const DISCOVERY_LIMIT = 24;
+
+let discoveryRunning = false;
+let discoveryDone = false;
 
 /** Surfaces where refilling makes sense; a watch page is not a feed. */
 const FEED_SURFACES = new Set(["home", "search", "subscriptions", "channel", "playlists"]);
@@ -186,6 +199,8 @@ function applySettings(options: { rescan: boolean }): void {
   // change how much survives, so the refill budget starts again.
   guardedVideoId = null;
   backfill.reset();
+  // A different window means different discoveries are possible.
+  discoveryDone = false;
   if (options.rescan) scheduleScan(true);
 }
 
@@ -194,6 +209,9 @@ function teardown(): void {
   resetShelves();
   resetEraFeatures();
   removeEmptyState();
+  removeDiscovery();
+  discoveryDone = false;
+  discoveryRunning = false;
   clearRootFlags();
   removeBlockOverlay();
   setWatchState("idle");
@@ -235,6 +253,11 @@ function observe(): void {
   setLoadMoreHandler(() => {
     backfill.requestAnother(true);
     scheduleScan(false);
+  });
+
+  setDiscoverRefreshHandler(() => {
+    discoveryDone = false;
+    void runDiscovery();
   });
 }
 
@@ -293,6 +316,7 @@ function refillFeed(): void {
   const surface = detectPageSurface(window.location);
   if (!FEED_SURFACES.has(surface)) {
     removeEmptyState();
+    removeDiscovery();
     return;
   }
 
@@ -314,6 +338,10 @@ function refillFeed(): void {
         : "idle";
 
     renderEmptyState({ status, visible, total, virtualDate: settings.virtualDate }, t);
+
+    // Discovery is independent of refilling: one asks YouTube for more of the
+    // same feed, the other looks outside it.
+    if (status === "exhausted") void runDiscovery();
     return;
   }
 
@@ -328,6 +356,66 @@ function refillFeed(): void {
   // Ask again shortly: the next batch arrives asynchronously, and the mutation
   // observer may not fire if YouTube appended nothing.
   if (status === "loading") scheduleScan(false);
+
+  // Once YouTube has nothing more to offer, go looking beyond what it offered.
+  if (status === "exhausted" && visible < backfill.targetVisible) {
+    void runDiscovery();
+  }
+}
+
+// ----------------------------------------------------------------- discovery
+
+/**
+ * Look for era videos outside what YouTube recommended.
+ *
+ * Only worth doing once the ordinary feed has been exhausted: this costs a
+ * page fetch per candidate, and if the recommender was already producing
+ * enough in-window videos there is nothing to fix.
+ */
+async function runDiscovery(): Promise<void> {
+  if (!settings.discoverEra) return;
+  if (discoveryRunning || discoveryDone) return;
+
+  // Seeds are the videos already on the page that passed the filter: known to
+  // be in the window, and close to what the user is actually looking at.
+  const seeds = [...resolutions.entries()]
+    .filter(([, date]) => date !== null && decideCardState(date, settings) === "visible")
+    .map(([videoId]) => videoId)
+    .slice(0, 12);
+
+  if (seeds.length === 0) {
+    // Nothing in-window to walk out from. The panel already explains the page.
+    return;
+  }
+
+  discoveryRunning = true;
+  renderDiscovery({ status: "searching" }, t);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MESSAGE_DISCOVER_ERA,
+      seeds,
+      start: settings.rangeStart,
+      end: settings.virtualDate,
+      limit: DISCOVERY_LIMIT,
+      exclude: [...resolutions.keys()]
+    });
+
+    if (!isEraDiscoveredResponse(response)) throw new Error("unexpected response");
+
+    discoveryDone = true;
+    renderDiscovery(
+      response.videos.length > 0
+        ? { status: "results", videos: response.videos }
+        : { status: "empty" },
+      t
+    );
+  } catch (error) {
+    debug("discovery failed", error);
+    renderDiscovery({ status: "empty" }, t);
+  } finally {
+    discoveryRunning = false;
+  }
 }
 
 /**
@@ -347,6 +435,8 @@ function detectNavigation(): void {
   backfill.reset();
   userHasScrolled = false;
   removeEmptyState();
+  removeDiscovery();
+  discoveryDone = false;
 
   const videoId = currentWatchVideoId(window.location);
   if (videoId) {
