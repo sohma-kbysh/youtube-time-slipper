@@ -127,6 +127,29 @@ machine — `pending` (hidden) → `visible`, `future` (hidden), or
 being hidden a moment later. This is what prevents a future video from
 flashing on screen before it gets filtered out.
 
+**Keeping the page coherent.** Removing cards one at a time leaves the
+scaffolding behind, so a shelf whose videos are all hidden is collapsed
+along with them — no orphaned headings, "Show less" buttons or blank
+bands. Because today's recommendations are mostly recent, a distant
+virtual present can still empty a feed; with **Keep loading until the
+feed is full** enabled (the default), the extension then asks YouTube
+for more items — up to 25 requests per page, spaced out, stopping early
+once ~20 videos are visible or YouTube stops producing new ones. It only
+moves the viewport while the page is nearly empty, and stops doing so
+once you scroll yourself. If the feed still comes up short, a panel
+explains why and offers a **Load more** button rather than leaving a
+blank screen.
+
+This never relaxes the filter — it only changes how much material the
+filter is applied to.
+
+## Languages
+
+The interface is available in English, 日本語, 简体中文, 한국어, Español
+and Deutsch. The default follows your browser's language preferences, and
+the popup has a selector to override it — useful because Chrome's UI
+language and your YouTube content language are often not the same.
+
 ## Supported YouTube surfaces
 
 The content script scans video cards on:
@@ -161,6 +184,13 @@ navigation came from.
   date comes back — that is the cost of never flashing a future video.
   Subsequent visits are served from the IndexedDB cache and need no
   network at all.
+- The further back your virtual present is, the thinner every feed gets.
+  The extension filters what today's recommender offers; it cannot make
+  YouTube recommend 2012 videos. Refilling exhausts what YouTube is
+  willing to hand over, which helps for cutoffs a few years back and much
+  less for a decade. Search and channel pages are the reliable way to
+  reach genuinely old material — a channel's back catalogue is all still
+  there, and the filter simply stops it at your date.
 - Publication-date resolution depends on YouTube continuing to expose
   machine-readable date metadata on the watch page in its current form;
   if YouTube changes that markup, resolution can start failing until
