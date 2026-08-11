@@ -97,6 +97,9 @@ export const ja: Catalog = {
     "YouTube のおすすめは今日の動画が中心で、その多くは {date} より後に公開されたものです。追加で読み込むと多少は増えますが、仮想の現在を過去に設定するほど見つかる動画は少なくなります。",
   "feed.loadMore": "さらに読み込む",
   "feed.loading": "古い動画を探しています…",
+  "feed.rateLimitedTitle": "YouTube が自動取得を一時的に制限しています。",
+  "feed.rateLimitedBody":
+    "API キーを設定すると、動画ページを個別取得せずに公開日を一括確認できます。",
   "feed.exhausted":
     "YouTube からこれ以上の動画は得られませんでした。仮想の現在を後の日付にするか、具体的な語句で検索してみてください。",
   "feed.visibleCount": "このページの {total} 本中 {visible} 本がタイムライン内の動画です。"

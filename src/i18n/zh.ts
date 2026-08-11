@@ -93,6 +93,8 @@ export const zh: Catalog = {
     "YouTube 推荐的是当下的视频，其中大部分发布于 {date} 之后。继续加载会有所帮助，但虚拟当前日期越靠前，能找到的内容就越少。",
   "feed.loadMore": "加载更多",
   "feed.loading": "正在寻找更早的视频…",
+  "feed.rateLimitedTitle": "YouTube 暂时限制了自动查询。",
+  "feed.rateLimitedBody": "设置 YouTube Data API 密钥后，可批量查询发布日期。",
   "feed.exhausted":
     "YouTube 无法为此页面提供更多视频。可以把虚拟当前日期设置得晚一些，或者搜索具体的内容。",
   "feed.visibleCount": "本页 {total} 个视频中有 {visible} 个属于你的时间线。"

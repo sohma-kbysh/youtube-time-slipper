@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MemoryCache, isUsable, type CacheRecord } from "../src/background/cache";
 import { FetchQueue } from "../src/background/fetch-queue";
 import {
+  HTML_CIRCUIT_BREAKER_MS,
   PARSER_VERSION,
   createResolver,
   parsePublicationDate
@@ -67,6 +68,109 @@ function okResponse(body: string): Response {
 }
 
 describe("createResolver", () => {
+  it("resolves 50 cache misses with one Data API call and no watch-page fetch", async () => {
+    const ids = Array.from({ length: 50 }, (_, index) =>
+      `A${String(index).padStart(10, "0")}`
+    );
+    const listVideoMetadata = vi.fn(async (_key: string, batch: string[]) =>
+      new Map(batch.map((videoId) => [videoId, {
+        videoId,
+        publishedDate: "2012-08-12",
+        title: `title ${videoId}`,
+        channelTitle: "channel"
+      }]))
+    );
+    const fetchImpl = vi.fn();
+    const resolver = createResolver({
+      cache: new MemoryCache(),
+      fetchImpl: fetchImpl as never,
+      getApiKey: async () => "AIzaTestKey",
+      listVideoMetadata
+    });
+
+    const results = await resolver.resolveMany(ids);
+
+    expect(results.size).toBe(50);
+    expect(listVideoMetadata).toHaveBeenCalledOnce();
+    expect(listVideoMetadata.mock.calls[0]?.[1]).toHaveLength(50);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(results.get(ids[0]!)?.source).toBe("youtube-api");
+  });
+
+  it("splits 120 cache misses into exactly three Data API calls", async () => {
+    const ids = Array.from({ length: 120 }, (_, index) =>
+      `B${String(index).padStart(10, "0")}`
+    );
+    const listVideoMetadata = vi.fn(async (_key: string, batch: string[]) =>
+      new Map(batch.map((videoId) => [videoId, {
+        videoId,
+        publishedDate: "2012-08-12",
+        title: videoId,
+        channelTitle: "channel"
+      }]))
+    );
+    const resolver = createResolver({
+      cache: new MemoryCache(),
+      getApiKey: async () => "AIzaTestKey",
+      listVideoMetadata
+    });
+
+    await resolver.resolveMany(ids);
+
+    expect(listVideoMetadata).toHaveBeenCalledTimes(3);
+    expect(listVideoMetadata.mock.calls.map((call) => call[1].length)).toEqual([50, 50, 20]);
+  });
+
+  it("caches API dates so a subsequent resolution performs no network calls", async () => {
+    const cache = new MemoryCache();
+    const listVideoMetadata = vi.fn(async () => new Map([[ID, {
+      videoId: ID,
+      publishedDate: "2014-05-01",
+      title: "title",
+      channelTitle: "channel"
+    }]]));
+    const resolver = createResolver({
+      cache,
+      getApiKey: async () => "AIzaTestKey",
+      listVideoMetadata
+    });
+
+    expect((await resolver.resolve(ID)).source).toBe("youtube-api");
+    expect((await resolver.resolve(ID)).source).toBe("cache");
+    expect(listVideoMetadata).toHaveBeenCalledOnce();
+  });
+
+  it("treats a missing API item as unknown without scraping its watch page", async () => {
+    const fetchImpl = vi.fn();
+    const resolver = createResolver({
+      cache: new MemoryCache(),
+      fetchImpl: fetchImpl as never,
+      getApiKey: async () => "AIzaTestKey",
+      listVideoMetadata: vi.fn(async () => new Map())
+    });
+
+    const result = await resolver.resolve(ID);
+
+    expect(result.publishedDate).toBeNull();
+    expect(result.source).toBe("unknown");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to HTML when a configured API request fails", async () => {
+    const fetchImpl = vi.fn();
+    const resolver = createResolver({
+      cache: new MemoryCache(),
+      fetchImpl: fetchImpl as never,
+      getApiKey: async () => "AIzaTestKey",
+      listVideoMetadata: vi.fn(async () => {
+        throw new Error("API unavailable");
+      })
+    });
+
+    expect((await resolver.resolve(ID)).publishedDate).toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("resolves a video from its watch page and caches the result", async () => {
     const cache = new MemoryCache();
     const fetchImpl = vi.fn(async () => okResponse(fixture("watch-meta.html")));
@@ -186,6 +290,52 @@ describe("createResolver", () => {
 
     expect(credentials).toEqual(["omit", "include"]);
     expect(result.publishedDate).toBe("2014-05-01");
+  });
+
+  it("opens a circuit on google.com/sorry and does not retry with credentials", async () => {
+    const response = new Response("challenge", { status: 200 });
+    Object.defineProperty(response, "url", {
+      value: "https://www.google.com/sorry/index?continue=youtube",
+      configurable: true
+    });
+    let clock = 1_000;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce(okResponse(fixture("watch-meta.html")));
+    const resolver = createResolver({
+      cache: new MemoryCache(),
+      queue: new FetchQueue(2),
+      fetchImpl: fetchImpl as never,
+      now: () => clock
+    });
+
+    const first = await resolver.resolveManyDetailed([ID]);
+    const second = await resolver.resolveManyDetailed([OTHER_ID]);
+
+    expect(first.status).toBe("html-rate-limited");
+    expect(second.status).toBe("html-rate-limited");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0]?.[1]?.credentials).toBe("omit");
+
+    clock += HTML_CIRCUIT_BREAKER_MS;
+    const afterCooldown = await resolver.resolve("ZZZZZZZZZZZ");
+    expect(afterCooldown.publishedDate).toBe("2014-05-01");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens the HTML circuit on HTTP 429", async () => {
+    const fetchImpl = vi.fn(async () => new Response("slow down", { status: 429 }));
+    const resolver = createResolver({
+      cache: new MemoryCache(),
+      queue: new FetchQueue(1),
+      fetchImpl: fetchImpl as never
+    });
+
+    const result = await resolver.resolveManyDetailed([ID, OTHER_ID]);
+
+    expect(result.status).toBe("html-rate-limited");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("reports unknown when the network fails, and does not throw", async () => {

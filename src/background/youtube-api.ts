@@ -67,6 +67,18 @@ export interface EraSearchResult {
   quotaUnits: number;
 }
 
+export interface ApiVideoMetadata {
+  videoId: VideoId;
+  publishedDate: CalendarDate;
+  title: string;
+  channelTitle: string;
+}
+
+export interface VideoMetadataResult {
+  videos: Map<VideoId, ApiVideoMetadata>;
+  quotaUnits: number;
+}
+
 /**
  * Why a call failed, in terms the UI can explain.
  *
@@ -186,6 +198,46 @@ export function createYouTubeApi(deps: ApiDependencies = {}) {
     return { quotaUnits: QUOTA_VIDEOS_LIST };
   }
 
+  /** Resolve up to fifty ordinary feed cards with one one-unit API call. */
+  async function listVideoMetadata(
+    apiKey: string,
+    videoIds: VideoId[]
+  ): Promise<VideoMetadataResult> {
+    const ids = [...new Set(videoIds)].filter(isValidVideoId).slice(0, 50);
+    const videos = new Map<VideoId, ApiVideoMetadata>();
+    if (ids.length === 0) return { videos, quotaUnits: 0 };
+
+    const body = (await call("videos", {
+      part: "snippet",
+      id: ids.join(","),
+      key: apiKey.trim()
+    })) as {
+      items?: Array<{
+        id?: string;
+        snippet?: {
+          publishedAt?: string;
+          title?: string;
+          channelTitle?: string;
+        };
+      }>;
+    };
+
+    for (const item of body.items ?? []) {
+      const videoId = item.id;
+      const publishedDate = calendarDateFromIso(item.snippet?.publishedAt);
+      if (!videoId || !ids.includes(videoId) || !publishedDate) continue;
+
+      videos.set(videoId, {
+        videoId,
+        publishedDate,
+        title: decodeEntities(item.snippet?.title ?? videoId),
+        channelTitle: decodeEntities(item.snippet?.channelTitle ?? "")
+      });
+    }
+
+    return { videos, quotaUnits: QUOTA_VIDEOS_LIST };
+  }
+
   /**
    * Search a date range.
    *
@@ -256,7 +308,7 @@ export function createYouTubeApi(deps: ApiDependencies = {}) {
     };
   }
 
-  return { verifyKey, searchEra };
+  return { verifyKey, listVideoMetadata, searchEra };
 }
 
 function adjacentDayBoundary(

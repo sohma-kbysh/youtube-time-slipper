@@ -106,6 +106,7 @@ export interface Settings {
 /** Where a publication date came from. Recorded for debugging and cache busting. */
 export type ResolutionSource =
   | "cache"
+  | "youtube-api"
   | "youtube-html"
   | "document-meta"
   | "relative-date"

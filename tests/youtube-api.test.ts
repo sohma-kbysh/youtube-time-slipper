@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DAILY_QUOTA,
   QUOTA_SEARCH,
+  QUOTA_VIDEOS_LIST,
   YouTubeApiError,
   createYouTubeApi,
   searchCacheKey
@@ -27,6 +28,42 @@ function searchBody(
 }
 
 const KEY = "AIzaTestKey";
+
+describe("listVideoMetadata", () => {
+  it("batches at most 50 ids and parses publication metadata", async () => {
+    const ids = Array.from({ length: 55 }, (_, index) =>
+      `V${String(index).padStart(10, "0")}`
+    );
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string) => {
+      urls.push(String(url));
+      return jsonResponse({
+        items: [{
+          id: ids[0],
+          snippet: {
+            publishedAt: "2012-08-12T09:10:11Z",
+            title: "Archive &amp; video",
+            channelTitle: "Archive Channel"
+          }
+        }]
+      });
+    });
+
+    const api = createYouTubeApi({ fetchImpl: fetchImpl as never });
+    const result = await api.listVideoMetadata(KEY, ids);
+    const params = new URL(urls[0]!).searchParams;
+
+    expect(params.get("part")).toBe("snippet");
+    expect(params.get("id")?.split(",")).toHaveLength(50);
+    expect(result.videos.get(ids[0]!)).toEqual({
+      videoId: ids[0],
+      publishedDate: "2012-08-12",
+      title: "Archive & video",
+      channelTitle: "Archive Channel"
+    });
+    expect(result.quotaUnits).toBe(QUOTA_VIDEOS_LIST);
+  });
+});
 
 describe("searchEra", () => {
   it("asks for the window, inclusive of its last day", async () => {

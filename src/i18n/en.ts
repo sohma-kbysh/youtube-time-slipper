@@ -106,6 +106,9 @@ export const en = {
     "YouTube recommends today's videos, and most of them were published after {date}. Loading more helps, but the further back your virtual present is, the less there is to find.",
   "feed.loadMore": "Load more",
   "feed.loading": "Looking for older videos…",
+  "feed.rateLimitedTitle": "YouTube is temporarily limiting automatic lookups.",
+  "feed.rateLimitedBody":
+    "Set a YouTube Data API key to check publication dates in batches without fetching each video page.",
   "feed.exhausted":
     "YouTube has no more videos to offer for this page. Try a later virtual present, or search for something specific.",
   "feed.visibleCount": "{visible} of {total} videos on this page are from your timeline."

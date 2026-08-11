@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_CONCURRENCY, FetchQueue } from "../src/background/fetch-queue";
 
@@ -68,5 +68,43 @@ describe("FetchQueue", () => {
 
     await expect(failing).rejects.toThrow("boom");
     await expect(queue.run(async () => "next")).resolves.toBe("next");
+  });
+
+  it("spaces task starts by the configured minimum interval", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    try {
+      const queue = new FetchQueue(2, 750);
+      const starts: number[] = [];
+      const tasks = Array.from({ length: 3 }, () =>
+        queue.run(async () => void starts.push(Date.now()))
+      );
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(starts).toEqual([0]);
+
+      await vi.advanceTimersByTimeAsync(750);
+      expect(starts).toEqual([0, 750]);
+
+      await vi.advanceTimersByTimeAsync(750);
+      await Promise.all(tasks);
+      expect(starts).toEqual([0, 750, 1500]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels pending tasks without interrupting the active task", async () => {
+    const queue = new FetchQueue(1);
+    const gate = deferred<string>();
+    const active = queue.run(() => gate.promise);
+    const pending = queue.run(async () => "should not run");
+
+    expect(queue.cancelPending(new Error("circuit open"))).toBe(1);
+    await expect(pending).rejects.toThrow("circuit open");
+
+    gate.resolve("finished");
+    await expect(active).resolves.toBe("finished");
   });
 });

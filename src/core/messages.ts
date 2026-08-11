@@ -32,6 +32,7 @@ export interface ResolveVideoDatesRequest {
 export interface VideoDatesResolvedResponse {
   type: typeof MESSAGE_VIDEO_DATES_RESOLVED;
   results: Record<VideoId, PublicationResolution>;
+  resolverStatus?: "html-rate-limited";
 }
 
 export interface ResolveErrorResponse {

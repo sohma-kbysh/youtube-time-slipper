@@ -97,6 +97,8 @@ export const de: Catalog = {
     "YouTube empfiehlt die Videos von heute, und die meisten davon sind nach dem {date} erschienen. Mehr zu laden hilft, aber je weiter deine virtuelle Gegenwart zurückliegt, desto weniger gibt es zu finden.",
   "feed.loadMore": "Mehr laden",
   "feed.loading": "Suche nach älteren Videos…",
+  "feed.rateLimitedTitle": "YouTube begrenzt automatische Abfragen vorübergehend.",
+  "feed.rateLimitedBody": "Mit einem YouTube-Data-API-Schlüssel lassen sich Veröffentlichungsdaten gesammelt abrufen.",
   "feed.exhausted":
     "YouTube hat für diese Seite keine weiteren Videos. Wähle eine spätere virtuelle Gegenwart oder suche gezielt nach etwas.",
   "feed.visibleCount":

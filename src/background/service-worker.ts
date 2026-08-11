@@ -27,6 +27,7 @@ import {
   type ExtensionResponse
 } from "../core/messages.js";
 import { loadSettings } from "../storage/settings.js";
+import { recordUsage } from "../storage/api-usage.js";
 import { createEraSearch } from "./era-search.js";
 import { createYouTubeApi, YouTubeApiError } from "./youtube-api.js";
 import type { PublicationResolution, VideoId } from "../core/types.js";
@@ -34,7 +35,11 @@ import { IndexedDbCache, MemoryCache, type PublicationCache } from "./cache.js";
 import { createDiscovery } from "./discovery.js";
 import { createHistoricalFeedProvider } from "./historical-feed-provider.js";
 import { FetchQueue } from "./fetch-queue.js";
-import { createResolver } from "./resolver.js";
+import {
+  HTML_FETCH_CONCURRENCY,
+  HTML_FETCH_MIN_INTERVAL_MS,
+  createResolver
+} from "./resolver.js";
 
 function createCache(): PublicationCache {
   try {
@@ -47,9 +52,29 @@ function createCache(): PublicationCache {
   }
 }
 
+const api = createYouTubeApi();
+
 const resolver = createResolver({
   cache: createCache(),
-  queue: new FetchQueue()
+  queue: new FetchQueue(HTML_FETCH_CONCURRENCY, HTML_FETCH_MIN_INTERVAL_MS),
+  getApiKey: async () => {
+    const settings = await loadSettings();
+    if (!settings.apiKey) return null;
+
+    try {
+      const permitted = await chrome.permissions.contains({
+        origins: ["https://www.googleapis.com/*"]
+      });
+      return permitted ? settings.apiKey : null;
+    } catch {
+      return null;
+    }
+  },
+  listVideoMetadata: async (apiKey, videoIds) => {
+    const result = await api.listVideoMetadata(apiKey, videoIds);
+    await recordUsage(result.quotaUnits);
+    return result.videos;
+  }
 });
 
 const discovery = createDiscovery({
@@ -58,7 +83,6 @@ const discovery = createDiscovery({
 
 const eraSearch = createEraSearch();
 const historicalFeed = createHistoricalFeedProvider({ eraSearch, discovery });
-const api = createYouTubeApi();
 
 /**
  * Answer a historical-feed request.
@@ -121,11 +145,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const videoIds = message.videoIds.slice(0, MAX_VIDEO_IDS_PER_REQUEST);
 
     resolver
-      .resolveMany(videoIds)
-      .then((resolutions) => {
+      .resolveManyDetailed(videoIds)
+      .then(({ results, status }) => {
         sendResponse({
           type: MESSAGE_VIDEO_DATES_RESOLVED,
-          results: toRecord(resolutions)
+          results: toRecord(results),
+          ...(status === "html-rate-limited"
+            ? { resolverStatus: status }
+            : {})
         } satisfies ExtensionResponse);
       })
       .catch(failed);

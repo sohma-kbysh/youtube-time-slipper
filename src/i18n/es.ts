@@ -97,6 +97,8 @@ export const es: Catalog = {
     "YouTube recomienda vídeos de hoy, y la mayoría se publicaron después del {date}. Cargar más ayuda, pero cuanto más atrás esté tu presente virtual, menos habrá que encontrar.",
   "feed.loadMore": "Cargar más",
   "feed.loading": "Buscando vídeos más antiguos…",
+  "feed.rateLimitedTitle": "YouTube limita temporalmente las consultas automáticas.",
+  "feed.rateLimitedBody": "Configura una clave de YouTube Data API para consultar fechas por lotes.",
   "feed.exhausted":
     "YouTube no tiene más vídeos que ofrecer para esta página. Prueba con un presente virtual más reciente o busca algo concreto.",
   "feed.visibleCount":

@@ -27,6 +27,10 @@ import type { WatchData } from "./discovery.js";
 import { FetchQueue } from "./fetch-queue.js";
 import { parseWatchPageContent } from "./watch-page.js";
 
+export const HTML_CIRCUIT_BREAKER_MS = 15 * 60 * 1000;
+export const HTML_FETCH_CONCURRENCY = 2;
+export const HTML_FETCH_MIN_INTERVAL_MS = 750;
+
 /**
  * Bump whenever the extraction below changes.
  *
@@ -93,6 +97,13 @@ export interface ParsedPublication {
   label: string;
 }
 
+export class HtmlRateLimitedError extends Error {
+  constructor(message = "YouTube HTML resolver is temporarily rate-limited") {
+    super(message);
+    this.name = "HtmlRateLimitedError";
+  }
+}
+
 /**
  * Pull a publication date out of a watch page.
  *
@@ -118,6 +129,29 @@ export interface ResolverDependencies {
   queue?: FetchQueue;
   fetchImpl?: typeof fetch;
   now?: () => number;
+  /** Returns a key only when one is configured and host permission is granted. */
+  getApiKey?: () => Promise<string | null>;
+  listVideoMetadata?: (
+    apiKey: string,
+    videoIds: VideoId[]
+  ) => Promise<
+    Map<
+      VideoId,
+      {
+        videoId: VideoId;
+        publishedDate: string;
+        title: string;
+        channelTitle: string;
+      }
+    >
+  >;
+}
+
+export type ResolverStatus = "ok" | "html-rate-limited";
+
+export interface ResolutionBatch {
+  results: Map<VideoId, PublicationResolution>;
+  status: ResolverStatus;
 }
 
 export interface Resolver {
@@ -125,6 +159,7 @@ export interface Resolver {
   resolveMany(
     videoIds: VideoId[]
   ): Promise<Map<VideoId, PublicationResolution>>;
+  resolveManyDetailed(videoIds: VideoId[]): Promise<ResolutionBatch>;
   /**
    * Everything the discovery walk needs about a video: its date, its title and
    * the videos YouTube considers adjacent to it. Served from cache when the
@@ -138,6 +173,9 @@ export function createResolver(deps: ResolverDependencies): Resolver {
   const queue = deps.queue ?? new FetchQueue();
   const doFetch = deps.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const now = deps.now ?? Date.now;
+  const getApiKey = deps.getApiKey ?? (async () => null);
+  const listVideoMetadata = deps.listVideoMetadata;
+  let htmlCircuitOpenUntil = 0;
 
   /**
    * Requests currently in flight, keyed by video id.
@@ -180,6 +218,8 @@ export function createResolver(deps: ResolverDependencies): Resolver {
     videoId: VideoId,
     credentials: RequestCredentials
   ): Promise<string | null> {
+    if (now() < htmlCircuitOpenUntil) throw new HtmlRateLimitedError();
+
     // The worker builds this URL itself. The content script only ever sends an
     // id, and it is validated again here, so a compromised page cannot use the
     // extension as a fetch proxy for an arbitrary URL.
@@ -191,6 +231,15 @@ export function createResolver(deps: ResolverDependencies): Resolver {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
     });
 
+    if (isChallengeResponse(response)) {
+      htmlCircuitOpenUntil = now() + HTML_CIRCUIT_BREAKER_MS;
+      const error = new HtmlRateLimitedError(
+        `YouTube challenge response (${response.status || "redirect"})`
+      );
+      queue.cancelPending(error);
+      throw error;
+    }
+
     if (!response.ok) {
       debug(`fetch ${videoId}: HTTP ${response.status}`);
       return null;
@@ -200,12 +249,14 @@ export function createResolver(deps: ResolverDependencies): Resolver {
   }
 
   async function resolveOverNetwork(
-    videoId: VideoId
+    videoId: VideoId,
+    baseline?: CacheRecord
   ): Promise<PublicationResolution> {
-    let source: ResolutionSource = "unknown";
-    let date: string | null = null;
-    let title: string | null = null;
-    let related: VideoId[] = [];
+    let source: ResolutionSource = baseline?.source ?? "unknown";
+    let date: string | null = baseline?.publishedDate ?? null;
+    let title: string | null = baseline?.title ?? null;
+    let related: VideoId[] = baseline?.related ?? [];
+    let rateLimited = false;
 
     try {
       // Cookie-less first: reading a public upload date does not need the
@@ -238,9 +289,33 @@ export function createResolver(deps: ResolverDependencies): Resolver {
         related = content.related;
       }
     } catch (error) {
-      // Network failure, timeout, abort: all become unknown, which the policy
-      // layer treats as "not proven to be in the past".
-      warn(`resolution failed for ${videoId}`, error);
+      if (error instanceof HtmlRateLimitedError) {
+        rateLimited = true;
+        debug(`HTML resolver circuit open for ${videoId}`);
+      } else {
+        // Network failure, timeout, abort: all become unknown, which the policy
+        // layer treats as "not proven to be in the past".
+        warn(`resolution failed for ${videoId}`, error);
+      }
+    }
+
+    lastWatchData.set(videoId, {
+      videoId,
+      publishedDate: date,
+      title,
+      related
+    });
+
+    // A challenge is temporary. Caching it as a day-long negative would keep
+    // cards hidden long after YouTube allows requests again.
+    if (rateLimited) {
+      return {
+        videoId,
+        publishedDate: date,
+        source,
+        confidence: date === null ? "unknown" : "exact-day",
+        resolvedAt: now()
+      };
     }
 
     const record: CacheRecord = {
@@ -252,13 +327,6 @@ export function createResolver(deps: ResolverDependencies): Resolver {
       title,
       related
     };
-
-    lastWatchData.set(videoId, {
-      videoId,
-      publishedDate: date,
-      title,
-      related
-    });
 
     try {
       await cache.put(record);
@@ -277,13 +345,14 @@ export function createResolver(deps: ResolverDependencies): Resolver {
 
   function startResolution(
     videoId: VideoId,
-    priority: number
+    priority: number,
+    baseline?: CacheRecord
   ): Promise<PublicationResolution> {
     const existing = inFlight.get(videoId);
     if (existing) return existing;
 
     const promise = queue
-      .run(() => resolveOverNetwork(videoId), priority)
+      .run(() => resolveOverNetwork(videoId, baseline), priority)
       .catch(() => unknownResolution(videoId))
       .finally(() => {
         inFlight.delete(videoId);
@@ -298,23 +367,24 @@ export function createResolver(deps: ResolverDependencies): Resolver {
     priority = 0
   ): Promise<PublicationResolution> {
     if (!isValidVideoId(videoId)) return unknownResolution(videoId);
-
-    const cached = await cache.getMany([videoId]).catch(() => new Map());
-    const record = cached.get(videoId);
-    if (record && isUsable(record, PARSER_VERSION, now())) {
-      return fromRecord(record);
-    }
-
-    return startResolution(videoId, priority);
+    void priority;
+    const batch = await resolveManyDetailed([videoId]);
+    return batch.results.get(videoId) ?? unknownResolution(videoId);
   }
 
   async function resolveMany(
     videoIds: VideoId[]
   ): Promise<Map<VideoId, PublicationResolution>> {
+    return (await resolveManyDetailed(videoIds)).results;
+  }
+
+  async function resolveManyDetailed(
+    videoIds: VideoId[]
+  ): Promise<ResolutionBatch> {
     const results = new Map<VideoId, PublicationResolution>();
 
     const valid = [...new Set(videoIds)].filter(isValidVideoId);
-    if (valid.length === 0) return results;
+    if (valid.length === 0) return { results, status: "ok" };
 
     // One transaction for the whole batch — the common case after the first
     // visit to a feed is that every id is a cache hit and nothing is fetched.
@@ -337,6 +407,64 @@ export function createResolver(deps: ResolverDependencies): Resolver {
 
     debug(`resolveMany: ${valid.length} ids, ${toFetch.length} need fetching`);
 
+    if (toFetch.length === 0) return { results, status: "ok" };
+
+    const apiKey = await getApiKey().catch((error) => {
+      warn("could not determine API resolver availability", error);
+      return null;
+    });
+
+    if (apiKey && listVideoMetadata) {
+      for (let offset = 0; offset < toFetch.length; offset += 50) {
+        const batch = toFetch.slice(offset, offset + 50);
+        let metadata = new Map<VideoId, {
+          videoId: VideoId;
+          publishedDate: string;
+          title: string;
+          channelTitle: string;
+        }>();
+        let apiFailed = false;
+
+        try {
+          metadata = await listVideoMetadata(apiKey, batch);
+        } catch (error) {
+          // A configured key must never turn an API outage into an HTML request
+          // storm. This batch stays temporarily unknown and is not cached, so
+          // a later page load can retry the API.
+          apiFailed = true;
+          warn("Data API metadata resolution failed", error);
+        }
+
+        for (const videoId of batch) {
+          if (apiFailed) {
+            results.set(videoId, unknownResolution(videoId));
+            continue;
+          }
+
+          const item = metadata.get(videoId);
+          const record: CacheRecord = {
+            videoId,
+            publishedDate: item?.publishedDate ?? null,
+            source: item ? "youtube-api" : "unknown",
+            parserVersion: PARSER_VERSION,
+            fetchedAt: now(),
+            title: item?.title ?? null
+          };
+
+          await putSafely(record);
+          results.set(videoId, {
+            videoId,
+            publishedDate: record.publishedDate,
+            source: record.source,
+            confidence: record.publishedDate === null ? "unknown" : "exact-day",
+            resolvedAt: record.fetchedAt
+          });
+        }
+      }
+
+      return { results, status: "ok" };
+    }
+
     // Priority descends with position so the ids the content script listed
     // first — the ones nearest the top of the page — come back first.
     const settled = await Promise.all(
@@ -347,7 +475,18 @@ export function createResolver(deps: ResolverDependencies): Resolver {
       results.set(resolution.videoId, resolution);
     }
 
-    return results;
+    return {
+      results,
+      status: now() < htmlCircuitOpenUntil ? "html-rate-limited" : "ok"
+    };
+  }
+
+  async function putSafely(record: CacheRecord): Promise<void> {
+    try {
+      await cache.put(record);
+    } catch (error) {
+      warn("cache write failed", error);
+    }
   }
 
   /**
@@ -384,9 +523,24 @@ export function createResolver(deps: ResolverDependencies): Resolver {
       return data;
     }
 
-    await startResolution(videoId, -50);
+    await startResolution(videoId, -50, record);
     return lastWatchData.get(videoId) ?? empty;
   }
 
-  return { resolve, resolveMany, getWatchData };
+  return { resolve, resolveMany, resolveManyDetailed, getWatchData };
+}
+
+function isChallengeResponse(response: Response): boolean {
+  if (response.status === 429) return true;
+  if (!response.url) return false;
+
+  try {
+    const url = new URL(response.url);
+    return (
+      (url.hostname === "google.com" || url.hostname.endsWith(".google.com")) &&
+      url.pathname.startsWith("/sorry/")
+    );
+  } catch {
+    return response.url.includes("google.com/sorry/");
+  }
 }

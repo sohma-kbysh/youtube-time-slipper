@@ -136,21 +136,30 @@ To load the built extension in Chrome:
                              v
 ┌───────────────────────────────────────────────────────────┐
 │ Service worker                                              │
-│  - publication resolver                                     │
-│  - fetch queue (max 6 concurrent, in-flight de-duplication) │
+│  - batched Data API publication resolver (up to 50 ids/call)│
+│  - rate-limited HTML fallback (max 2 concurrent)             │
 │  - IndexedDB cache (positive: indefinite, unknown: 24h,      │
 │    keyed with a parser version)                              │
 └───────────────────────────┬─────────────────────────────────┘
-                             │ fetch (only to youtube.com)
+                             │ API first; HTML only as fallback
                              v
-                  https://www.youtube.com/watch?v=<id>
+     googleapis.com/youtube/v3/videos  /  youtube.com/watch
 ```
 
-**Resolving a publication date.** The service worker fetches
-`https://www.youtube.com/watch?v=<id>` and extracts a machine-readable
-date from the page: the `<meta itemprop="datePublished">` /
-`<meta itemprop="uploadDate">` tags, or the `publishDate` / `uploadDate`
-fields in the page's embedded JSON. The result is cached in IndexedDB.
+**Resolving a publication date.** After one IndexedDB cache read, a configured
+API key resolves cache misses through `videos.list(part=snippet)` in batches of
+up to 50 ids. One feed therefore needs a handful of one-unit API calls instead
+of a request to every watch page. Missing/deleted API items become unknown and
+are not immediately scraped again.
+
+Without an API key, the fallback fetches
+`https://www.youtube.com/watch?v=<id>` conservatively (two concurrent requests,
+at least 750 ms between starts) and extracts machine-readable date metadata.
+A `google.com/sorry` redirect or HTTP 429 opens a 15-minute circuit breaker,
+stopping all new watch-page requests and showing a distinct explanation in the
+feed.
+
+The result is cached in IndexedDB.
 Positive resolutions (a date was found) are cached indefinitely;
 negative resolutions (no date could be found) are cached for 24 hours
 so they get retried. Every cache record carries the version of the
@@ -314,11 +323,10 @@ navigation came from.
   subscriber counts, the historical UI, the historical recommendation
   algorithm, historical search ranking, or deleted/private videos (see
   [What it does not do](#what-it-does-not-do)).
-- The first visit to a feed is slow to fill in. Every unseen video costs
-  one watch-page fetch, six at a time, and cards stay hidden until their
-  date comes back — that is the cost of never flashing a future video.
-  Subsequent visits are served from the IndexedDB cache and need no
-  network at all.
+- With an API key, a cold feed resolves up to 50 unseen videos per one-unit API
+  call. Without a key, the conservative HTML fallback is intentionally slower;
+  cards stay hidden until their date returns. Subsequent visits are served from
+  IndexedDB and need no network at all.
 - Without a Data API key, the further back your virtual present is, the thinner
   feeds can get. The related-video graph is a bounded fallback, not a historical
   recommendation archive. With a key, period search fills the historical grid
@@ -335,9 +343,9 @@ navigation came from.
 - The extension is entirely client-side. There is no server backend, no
   analytics, no telemetry, no account or sign-in, and no remotely
   hosted or dynamically loaded code.
-- The extension requests `youtube.com` to resolve dates and related videos. If
-  you configure an API key, it also requests `googleapis.com` for historical
-  searches and key verification.
+- With an API key, the extension requests `googleapis.com` for batched
+  publication dates, historical searches and key verification. Without one,
+  it requests `youtube.com` conservatively to resolve dates and related videos.
 - Your settings (including `D_virtual`) are stored in
   `chrome.storage.local`, and the resolved-date cache is stored in
   IndexedDB. Both stay on your machine.

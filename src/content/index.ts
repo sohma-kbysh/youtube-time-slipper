@@ -83,6 +83,7 @@ let scanTimer: number | null = null;
 let lastHref = "";
 let consecutiveFailures = 0;
 let backoffUntil = 0;
+let resolutionRateLimited = false;
 
 /** The video the watch guard has already ruled on, so it is not re-run. */
 let guardedVideoId: VideoId | null = null;
@@ -211,6 +212,7 @@ function applySettings(options: { rescan: boolean }): void {
   historicalFeedDone = false;
   historicalVideos = [];
   historicalSource = "none";
+  resolutionRateLimited = false;
   if (options.rescan) scheduleScan(true);
 }
 
@@ -224,6 +226,7 @@ function teardown(): void {
   historicalFeedRunning = false;
   historicalVideos = [];
   historicalSource = "none";
+  resolutionRateLimited = false;
   clearRootFlags();
   removeBlockOverlay();
   setWatchState("idle");
@@ -356,22 +359,8 @@ function refillFeed(): void {
   // more the instant the page loads, before anything has had a chance to pass.
   const stillResolving = requested.size > resolutions.size;
 
-  if (stillResolving) {
-    renderEmptyState(
-      {
-        status: "loading",
-        visible: combinedVisible,
-        total: combinedTotal,
-        virtualDate: settings.virtualDate
-      },
-      t
-    );
-    return;
-  }
-
-  // This invariant is checked before any exhausted branch. In particular a
-  // page with 46 survivors and a target of 20 can never display the sparse
-  // panel, regardless of what a previous refill attempt did.
+  // Enough combined native/API cards always wins, even if unrelated native
+  // cards are still resolving in the background.
   if (combinedVisible >= backfill.targetVisible) {
     backfill.update({
       visible: combinedVisible,
@@ -382,11 +371,53 @@ function refillFeed(): void {
     return;
   }
 
+  // With a configured API key, historical search does not need native cards
+  // as graph-walk seeds and can run alongside their batched date resolution.
+  const canStartHistoricalFeed =
+    settings.discoverEra &&
+    !historicalFeedDone &&
+    (!stillResolving || settings.apiKey.length > 0);
+
+  if (canStartHistoricalFeed && !historicalFeedRunning) {
+    void runHistoricalFeed(visible);
+  }
+
+  if (stillResolving) {
+    if (historicalFeedRunning) {
+      removeEmptyState();
+      return;
+    }
+    renderEmptyState(
+      {
+        status: "loading",
+        visible: combinedVisible,
+        total: combinedTotal,
+        virtualDate: settings.virtualDate,
+        rateLimited: resolutionRateLimited
+      },
+      t
+    );
+    return;
+  }
+
   // Historical search is the first refill source. It can directly ask for the
   // chosen era, unlike repeatedly loading today's recommendations.
   if (settings.discoverEra && !historicalFeedDone) {
     removeEmptyState();
-    if (!historicalFeedRunning) void runHistoricalFeed(visible);
+    return;
+  }
+
+  if (resolutionRateLimited) {
+    renderEmptyState(
+      {
+        status: "exhausted",
+        visible: combinedVisible,
+        total: combinedTotal,
+        virtualDate: settings.virtualDate,
+        rateLimited: true
+      },
+      t
+    );
     return;
   }
 
@@ -396,7 +427,7 @@ function refillFeed(): void {
     const status = combinedVisible < backfill.targetVisible ? "exhausted" : "satisfied";
 
     renderEmptyState(
-      { status, visible: combinedVisible, total: combinedTotal, virtualDate: settings.virtualDate },
+      { status, visible: combinedVisible, total: combinedTotal, virtualDate: settings.virtualDate, rateLimited: resolutionRateLimited },
       t
     );
     return;
@@ -409,7 +440,7 @@ function refillFeed(): void {
   });
 
   renderEmptyState(
-    { status, visible: combinedVisible, total: combinedTotal, virtualDate: settings.virtualDate },
+    { status, visible: combinedVisible, total: combinedTotal, virtualDate: settings.virtualDate, rateLimited: resolutionRateLimited },
     t
   );
 
@@ -512,6 +543,7 @@ function detectNavigation(): void {
   historicalFeedDone = false;
   historicalVideos = [];
   historicalSource = "none";
+  resolutionRateLimited = false;
 
   const videoId = currentWatchVideoId(window.location);
   if (videoId) {
@@ -578,6 +610,7 @@ async function requestResolutions(videoIds: VideoId[]): Promise<void> {
     }
 
     consecutiveFailures = 0;
+    resolutionRateLimited = response.resolverStatus === "html-rate-limited";
 
     for (const [videoId, resolution] of Object.entries(response.results)) {
       resolutions.set(videoId, resolution.publishedDate ?? null);

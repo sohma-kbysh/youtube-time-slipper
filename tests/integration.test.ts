@@ -57,7 +57,11 @@ const DEFAULT_HISTORICAL_VIDEOS = [
 function installChromeStub(
   initial: Partial<Settings>,
   historicalVideos: typeof DEFAULT_HISTORICAL_VIDEOS | Promise<typeof DEFAULT_HISTORICAL_VIDEOS> =
-    DEFAULT_HISTORICAL_VIDEOS
+    DEFAULT_HISTORICAL_VIDEOS,
+  resolutionOptions: {
+    gate?: Promise<void>;
+    status?: "html-rate-limited";
+  } = {}
 ): void {
   storage = { settings: initial };
   storageListeners = [];
@@ -79,6 +83,8 @@ function installChromeStub(
       };
     }
 
+    await resolutionOptions.gate;
+
     const results: Record<VideoId, PublicationResolution> = {};
 
     for (const videoId of request.videoIds) {
@@ -91,7 +97,13 @@ function installChromeStub(
       };
     }
 
-    return { type: MESSAGE_VIDEO_DATES_RESOLVED, results };
+    return {
+      type: MESSAGE_VIDEO_DATES_RESOLVED,
+      results,
+      ...(resolutionOptions.status
+        ? { resolverStatus: resolutionOptions.status }
+        : {})
+    };
   });
 
   (globalThis as Record<string, unknown>)["chrome"] = {
@@ -156,9 +168,13 @@ async function bootContentScript(
   settings: Partial<Settings>,
   html: string = feed(),
   historicalVideos: typeof DEFAULT_HISTORICAL_VIDEOS | Promise<typeof DEFAULT_HISTORICAL_VIDEOS> =
-    DEFAULT_HISTORICAL_VIDEOS
+    DEFAULT_HISTORICAL_VIDEOS,
+  resolutionOptions: {
+    gate?: Promise<void>;
+    status?: "html-rate-limited";
+  } = {}
 ): Promise<void> {
-  installChromeStub(settings, historicalVideos);
+  installChromeStub(settings, historicalVideos, resolutionOptions);
   document.body.innerHTML = html;
 
   vi.resetModules();
@@ -478,6 +494,46 @@ describe("a feed that filtering empties", () => {
     await settle();
 
     expect(document.querySelector(".time-slipper-empty")).not.toBeNull();
+  });
+
+  it("starts the API historical feed while native date resolution is still pending", async () => {
+    const nativeResolution = new Promise<void>(() => {});
+
+    await bootContentScript(
+      {
+        enabled: true,
+        virtualDate: "2012-08-12",
+        fillFeed: false,
+        apiKey: "AIzaConfiguredKey"
+      },
+      feedWithShelf(),
+      DEFAULT_HISTORICAL_VIDEOS,
+      { gate: nativeResolution }
+    );
+
+    expect(sendMessage.mock.calls.some(
+      (call) => (call[0] as ExtensionRequest).type === MESSAGE_DISCOVER_ERA
+    )).toBe(true);
+    expect(document.querySelectorAll(".time-slipper-discover__card")).toHaveLength(2);
+  });
+
+  it("shows a distinct message when the HTML resolver is rate-limited", async () => {
+    await bootContentScript(
+      {
+        enabled: true,
+        virtualDate: "2012-08-12",
+        fillFeed: false,
+        language: "ja"
+      },
+      feedWithShelf(),
+      [],
+      { status: "html-rate-limited" }
+    );
+
+    expect(document.querySelector(".time-slipper-empty")?.textContent)
+      .toContain("YouTube が自動取得を一時的に制限しています。");
+    expect(document.querySelector(".time-slipper-empty")?.textContent)
+      .not.toContain("古い動画を探しています…");
   });
 
   it("asks YouTube for more videos", async () => {

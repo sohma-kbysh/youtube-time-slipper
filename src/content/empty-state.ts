@@ -19,6 +19,7 @@ export interface EmptyStateModel {
   visible: number;
   total: number;
   virtualDate: CalendarDate;
+  rateLimited?: boolean;
 }
 
 let panel: HTMLElement | null = null;
@@ -57,25 +58,30 @@ export function renderEmptyState(model: EmptyStateModel, t: Translator): void {
 
   const date = t.date(model.virtualDate);
 
-  if (title) title.textContent = t("feed.sparseTitle");
+  if (title) {
+    title.textContent = model.rateLimited
+      ? t("feed.rateLimitedTitle")
+      : t("feed.sparseTitle");
+  }
 
   if (body) {
-    body.textContent =
-      model.status === "exhausted"
+    body.textContent = model.rateLimited
+      ? t("feed.rateLimitedBody")
+      : model.status === "exhausted"
         ? t("feed.exhausted")
         : t("feed.sparseBody", { date });
   }
 
   if (status) {
     status.textContent =
-      model.status === "loading"
+      model.status === "loading" && !model.rateLimited
         ? t("feed.loading")
         : t("feed.visibleCount", { visible: model.visible, total: model.total });
   }
 
   if (button) {
     button.textContent = t("feed.loadMore");
-    button.disabled = model.status === "loading";
+    button.disabled = model.status === "loading" || model.rateLimited === true;
   }
 }
 
