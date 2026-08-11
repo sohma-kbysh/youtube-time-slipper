@@ -24,7 +24,8 @@ import { decideCardState, isActive, isSurfaceEnabled } from "../core/policy.js";
 import type { CalendarDate, Settings, VideoId } from "../core/types.js";
 import { defaultSettings, loadSettings, onSettingsChanged } from "../storage/settings.js";
 import { detectPageSurface, readDocumentPublicationMeta } from "./adapters.js";
-import { Backfill, TARGET_VISIBLE } from "./backfill.js";
+import { Backfill } from "./backfill.js";
+import { applyEraFeatures, resetEraFeatures } from "./era.js";
 import { mountBadge, removeBadge, updateBadge } from "./badge.js";
 import {
   removeEmptyState,
@@ -175,6 +176,10 @@ function applySettings(options: { rescan: boolean }): void {
   }
 
   updateBadge(settings, t);
+  backfill.configure({
+    targetVisible: settings.fillTargetVisible,
+    maxRounds: settings.fillMaxRounds
+  });
 
   // Dates are immutable, so a changed virtual date needs no re-resolution —
   // only re-classification of what we already know. A different cutoff can
@@ -187,6 +192,7 @@ function applySettings(options: { rescan: boolean }): void {
 function teardown(): void {
   resetAllCards();
   resetShelves();
+  resetEraFeatures();
   removeEmptyState();
   clearRootFlags();
   removeBlockOverlay();
@@ -267,6 +273,7 @@ function runScan(): void {
     detectNavigation();
     evaluateWatchPage();
     evaluateCards();
+    applyEraFeatures(settings);
     refillFeed();
     mountBadge(settings, t);
   } catch (error) {
@@ -302,7 +309,7 @@ function refillFeed(): void {
     // it just does not get more videos requested for it.
     const status = stillResolving
       ? "loading"
-      : visible < TARGET_VISIBLE && total > 0
+      : visible < backfill.targetVisible && total > 0
         ? "exhausted"
         : "idle";
 
@@ -453,6 +460,7 @@ function evaluateWatchPage(): void {
     if (blockedVideoId === videoId && !isBlockOverlayPresent()) {
       showBlockOverlay({
         virtualDate: settings.virtualDate,
+        rangeStart: settings.rangeStart,
         publishedDate: resolutions.get(videoId) ?? null,
         t
       });
@@ -492,7 +500,12 @@ function evaluateWatchPage(): void {
   }
 
   blockedVideoId = videoId;
-  showBlockOverlay({ virtualDate: settings.virtualDate, publishedDate: known, t });
+  showBlockOverlay({
+    virtualDate: settings.virtualDate,
+    rangeStart: settings.rangeStart,
+    publishedDate: known,
+    t
+  });
 }
 
 /**

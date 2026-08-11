@@ -133,6 +133,40 @@ describe("Backfill", () => {
     expect(requestMore).toHaveBeenCalledWith(true);
   });
 
+  it("obeys a user-configured target", () => {
+    const { backfill, round, requestMore } = harness();
+    backfill.configure({ targetVisible: 60 });
+
+    // The default target would have stopped here; the user asked for more.
+    expect(round(TARGET_VISIBLE + 1, 80)).toBe("loading");
+    expect(requestMore).toHaveBeenCalled();
+
+    expect(round(60, 200)).toBe("satisfied");
+  });
+
+  it("obeys a user-configured round cap", () => {
+    const { backfill, round, requestMore } = harness();
+    backfill.configure({ maxRounds: 3 });
+
+    let total = 0;
+    for (let index = 0; index < 10; index += 1) {
+      total += 20;
+      round(1, total);
+    }
+
+    expect(requestMore.mock.calls.length).toBe(3);
+  });
+
+  it("takes limits from the constructor", () => {
+    const requestMore = vi.fn(() => true);
+    const backfill = new Backfill({ now: () => 10_000, requestMore, targetVisible: 3 });
+
+    expect(backfill.targetVisible).toBe(3);
+    expect(backfill.update({ visible: 3, total: 10, allowScroll: true })).toBe(
+      "satisfied"
+    );
+  });
+
   it("starts over on navigation", () => {
     const { backfill, round } = harness();
 

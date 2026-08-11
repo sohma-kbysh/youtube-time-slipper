@@ -397,6 +397,103 @@ describe("a feed that filtering empties", () => {
   });
 });
 
+describe("features that did not exist yet", () => {
+  function pageWithShorts(): string {
+    return `
+      <div id="contents">
+        <ytd-guide-entry-renderer id="shorts-entry">
+          <a href="/shorts">Shorts</a>
+        </ytd-guide-entry-renderer>
+        <ytd-guide-entry-renderer id="playables-entry">
+          <a href="/playables">Playables</a>
+        </ytd-guide-entry-renderer>
+        <ytd-guide-entry-renderer id="subs-entry">
+          <a href="/feed/subscriptions">Subscriptions</a>
+        </ytd-guide-entry-renderer>
+        <ytd-reel-shelf-renderer id="shorts-shelf"></ytd-reel-shelf-renderer>
+        <ytd-rich-item-renderer id="old">
+          <a href="/watch?v=${OLD_VIDEO}">old</a>
+        </ytd-rich-item-renderer>
+      </div>
+    `;
+  }
+
+  function era(id: string): string | null {
+    return document.querySelector(`#${id}`)?.getAttribute("data-time-slipper-era") ?? null;
+  }
+
+  it("removes Shorts and Playables from a 2012 timeline", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12" },
+      pageWithShorts()
+    );
+
+    expect(era("shorts-entry")).toBe("shorts");
+    expect(era("shorts-shelf")).toBe("shorts");
+    expect(era("playables-entry")).toBe("playables");
+  });
+
+  it("leaves features that already existed", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12" },
+      pageWithShorts()
+    );
+
+    expect(era("subs-entry")).toBeNull();
+    expect(stateOf("old")).toBe("visible");
+  });
+
+  it("brings a feature back when the date moves past its launch", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12" },
+      pageWithShorts()
+    );
+    expect(era("shorts-entry")).toBe("shorts");
+
+    await updateSettings({ virtualDate: "2024-01-01" });
+
+    expect(era("shorts-entry")).toBeNull();
+  });
+
+  it("restores everything when the extension is switched off", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12" },
+      pageWithShorts()
+    );
+
+    await updateSettings({ enabled: false });
+
+    expect(document.querySelectorAll("[data-time-slipper-era]")).toHaveLength(0);
+  });
+});
+
+describe("a period rather than a cutoff", () => {
+  it("hides videos from before the window as well as after it", async () => {
+    await bootContentScript({
+      enabled: true,
+      virtualDate: "2012-08-12",
+      rangeStart: "2010-01-01"
+    });
+
+    // 2008 — before the window; 2018 — after it.
+    expect(stateOf("old")).toBe("before");
+    expect(stateOf("new")).toBe("future");
+  });
+
+  it("re-includes them when the lower bound is cleared", async () => {
+    await bootContentScript({
+      enabled: true,
+      virtualDate: "2012-08-12",
+      rangeStart: "2010-01-01"
+    });
+    expect(stateOf("old")).toBe("before");
+
+    await updateSettings({ rangeStart: null });
+
+    expect(stateOf("old")).toBe("visible");
+  });
+});
+
 describe("localisation", () => {
   it("renders the on-page UI in the chosen language", async () => {
     await bootContentScript({
