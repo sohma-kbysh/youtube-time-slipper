@@ -39,6 +39,7 @@ describe("isHiddenState", () => {
   it("mirrors the stylesheet", () => {
     expect(isHiddenState("future", STRICT)).toBe(true);
     expect(isHiddenState("pending", STRICT)).toBe(true);
+    expect(isHiddenState("duplicate", RELAXED)).toBe(true);
     expect(isHiddenState("visible", STRICT)).toBe(false);
     expect(isHiddenState("unknown", STRICT)).toBe(true);
     expect(isHiddenState("unknown", RELAXED)).toBe(false);
@@ -115,5 +116,11 @@ describe("countVisibleCards", () => {
 
   it("reports zero on an empty page", () => {
     expect(countVisibleCards(STRICT)).toEqual({ visible: 0, total: 0 });
+  });
+
+  it("does not count duplicate renderers as feed inventory", () => {
+    shelf("duplicates", ["visible", "duplicate", "future"]);
+
+    expect(countVisibleCards(STRICT)).toEqual({ visible: 1, total: 2 });
   });
 });

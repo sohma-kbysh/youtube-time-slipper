@@ -80,6 +80,11 @@ describe("shouldHide", () => {
     expect(shouldHide("pending", { unknownPolicy: "show" })).toBe(true);
   });
 
+  it("always hides duplicate renderers", () => {
+    expect(shouldHide("duplicate", { unknownPolicy: "hide" })).toBe(true);
+    expect(shouldHide("duplicate", { unknownPolicy: "show" })).toBe(true);
+  });
+
   it("always hides future videos", () => {
     expect(shouldHide("future", { unknownPolicy: "hide" })).toBe(true);
     expect(shouldHide("future", { unknownPolicy: "show" })).toBe(true);

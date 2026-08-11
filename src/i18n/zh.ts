@@ -88,14 +88,14 @@ export const zh: Catalog = {
   "block.unknown": "未知",
   "block.goBack": "返回",
 
-  "feed.sparseTitle": "这个页面上还几乎没有内容。",
+  "feed.sparseTitle": "符合此日期的视频较少。",
   "feed.sparseBody":
-    "YouTube 推荐的是当下的视频，其中大部分发布于 {date} 之后。继续加载会有所帮助，但虚拟当前日期越靠前，能找到的内容就越少。",
+    "发布于 {date} 之后的视频会被隐藏。你可以继续查找符合条件的视频。",
   "feed.loadMore": "加载更多",
-  "feed.loading": "正在寻找更早的视频…",
+  "feed.loading": "正在检查发布日期…",
   "feed.rateLimitedTitle": "YouTube 暂时限制了自动查询。",
   "feed.rateLimitedBody": "设置 YouTube Data API 密钥后，可批量查询发布日期。",
   "feed.exhausted":
-    "YouTube 无法为此页面提供更多视频。可以把虚拟当前日期设置得晚一些，或者搜索具体的内容。",
+    "此页面没有找到更多符合条件的视频。请尝试较晚的日期或更具体的搜索词。",
   "feed.visibleCount": "本页 {total} 个视频中有 {visible} 个属于你的时间线。"
 };

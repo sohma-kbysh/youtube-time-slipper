@@ -9,8 +9,8 @@
 
 import type { Translator } from "../core/i18n.js";
 import type { CalendarDate } from "../core/types.js";
-import { FEED_CONTAINER_SELECTOR } from "./adapters.js";
 import type { BackfillStatus } from "./backfill.js";
+import { mountFeedUi, setTextIfChanged, unmountFeedUi } from "./feed-ui.js";
 
 const PANEL_CLASS = "time-slipper-empty";
 
@@ -42,14 +42,8 @@ export function renderEmptyState(model: EmptyStateModel, t: Translator): void {
     return;
   }
 
-  const container = document.querySelector<HTMLElement>(FEED_CONTAINER_SELECTOR);
-  if (!container) return;
-
   if (!panel) panel = createPanel(t);
-
-  if (panel.parentElement !== container) {
-    container.prepend(panel);
-  }
+  if (!mountFeedUi(panel)) return;
 
   const title = panel.querySelector(`.${PANEL_CLASS}__title`);
   const body = panel.querySelector(`.${PANEL_CLASS}__body`);
@@ -57,40 +51,48 @@ export function renderEmptyState(model: EmptyStateModel, t: Translator): void {
   const button = panel.querySelector<HTMLButtonElement>(`.${PANEL_CLASS}__button`);
 
   const date = t.date(model.virtualDate);
-
-  if (title) {
-    title.textContent = model.rateLimited
-      ? t("feed.rateLimitedTitle")
+  const titleText = model.rateLimited
+    ? t("feed.rateLimitedTitle")
+    : model.status === "loading"
+      ? t("feed.loading")
       : t("feed.sparseTitle");
-  }
+  const bodyText = model.rateLimited
+    ? t("feed.rateLimitedBody")
+    : model.status === "exhausted"
+      ? t("feed.exhausted")
+      : t("feed.sparseBody", { date });
+  const statusText = t("feed.visibleCount", {
+    visible: model.visible,
+    total: model.total
+  });
 
-  if (body) {
-    body.textContent = model.rateLimited
-      ? t("feed.rateLimitedBody")
-      : model.status === "exhausted"
-        ? t("feed.exhausted")
-        : t("feed.sparseBody", { date });
-  }
-
-  if (status) {
-    status.textContent =
-      model.status === "loading" && !model.rateLimited
-        ? t("feed.loading")
-        : t("feed.visibleCount", { visible: model.visible, total: model.total });
-  }
+  setTextIfChanged(title, titleText);
+  setTextIfChanged(body, bodyText);
+  setTextIfChanged(status, statusText);
 
   if (button) {
-    button.textContent = t("feed.loadMore");
-    button.disabled = model.status === "loading" || model.rateLimited === true;
+    setTextIfChanged(button, t("feed.loadMore"));
+    const disabled = model.status === "loading" || model.rateLimited === true;
+    if (button.disabled !== disabled) button.disabled = disabled;
+    if (button.hidden !== disabled) button.hidden = disabled;
   }
+
+  const state = model.rateLimited ? "rate-limited" : model.status;
+  if (panel.dataset.state !== state) panel.dataset.state = state;
+  const busy = model.status === "loading" && !model.rateLimited ? "true" : "false";
+  if (panel.getAttribute("aria-busy") !== busy) panel.setAttribute("aria-busy", busy);
 }
 
 function createPanel(t: Translator): HTMLElement {
-  const element = document.createElement("div");
+  const element = document.createElement("section");
   element.className = PANEL_CLASS;
+  element.setAttribute("role", "status");
+  element.setAttribute("aria-live", "polite");
+  element.setAttribute("aria-labelledby", `${PANEL_CLASS}-title`);
 
   const title = document.createElement("h2");
   title.className = `${PANEL_CLASS}__title`;
+  title.id = `${PANEL_CLASS}-title`;
 
   const body = document.createElement("p");
   body.className = `${PANEL_CLASS}__body`;
@@ -109,6 +111,6 @@ function createPanel(t: Translator): HTMLElement {
 }
 
 export function removeEmptyState(): void {
-  panel?.remove();
+  unmountFeedUi(panel);
   panel = null;
 }

@@ -13,7 +13,7 @@
  */
 
 import { debug } from "../core/log.js";
-import { CONTINUATION_SELECTOR } from "./adapters.js";
+import { CONTINUATION_SELECTOR, isInInactiveTree } from "./adapters.js";
 
 /** Stop asking once this many videos are visible. */
 export const TARGET_VISIBLE = 20;
@@ -50,6 +50,24 @@ export interface BackfillDependencies {
   maxRounds?: number;
 }
 
+/**
+ * Continuation elements already activated on the current page.
+ *
+ * YouTube normally replaces the sentinel after a page arrives. Re-triggering
+ * the same element can submit the same continuation token twice and append a
+ * duplicate batch, so an element gets exactly one activation.
+ */
+let triggeredContinuations = new WeakSet<HTMLElement>();
+
+export function resetContinuationTracking(): void {
+  triggeredContinuations = new WeakSet<HTMLElement>();
+}
+
+function releaseCurrentContinuation(): void {
+  const sentinel = currentContinuation();
+  if (sentinel) triggeredContinuations.delete(sentinel);
+}
+
 export interface BackfillLimits {
   targetVisible: number;
   maxRounds: number;
@@ -67,6 +85,8 @@ export class Backfill {
 
   #rounds = 0;
   #idleRounds = 0;
+  /** A continuation was activated and has not produced any observed cards yet. */
+  #awaitingGrowth = false;
   #lastRunAt = 0;
   #lastTotal = -1;
   #status: BackfillStatus = "idle";
@@ -110,6 +130,7 @@ export class Backfill {
   reset(): void {
     this.#rounds = 0;
     this.#idleRounds = 0;
+    this.#awaitingGrowth = false;
     this.#lastRunAt = 0;
     this.#lastTotal = -1;
     this.#status = "idle";
@@ -119,46 +140,106 @@ export class Backfill {
   requestAnother(allowScroll = true): void {
     this.#idleRounds = 0;
     this.#rounds = Math.min(this.#rounds, this.#maxRounds - 1);
-    this.#lastRunAt = 0;
+    this.#awaitingGrowth = false;
+    this.#lastRunAt = this.#now();
     this.#status = "loading";
-    this.#requestMore(allowScroll);
+
+    // An explicit user retry is allowed to reactivate a sentinel that may have
+    // missed its first intersection/scroll notification. Automatic scans
+    // still retain the one-activation guarantee.
+    releaseCurrentContinuation();
+    if (this.#requestMore(allowScroll)) {
+      this.#rounds += 1;
+      this.#awaitingGrowth = true;
+    }
   }
 
   update(input: BackfillInput): BackfillStatus {
+    const hadBaseline = this.#lastTotal >= 0;
+    const grew = hadBaseline && input.total > this.#lastTotal;
+    this.#lastTotal = input.total;
+
+    // A response can arrive after the idle timeout. Growth is authoritative:
+    // leave the exhausted state and give the new batch a chance to expose its
+    // replacement continuation.
+    if (grew) {
+      this.#idleRounds = 0;
+      this.#awaitingGrowth = false;
+      // Some layouts retain one `#continuations` element and replace only its
+      // internal token. Growth proves the prior request completed, so that
+      // element may now safely represent the next page.
+      releaseCurrentContinuation();
+      if (this.#status === "exhausted") this.#status = "loading";
+    }
+
     if (input.visible >= this.#targetVisible) {
       this.#status = "satisfied";
       return this.#status;
     }
 
-    if (this.#rounds >= this.#maxRounds || this.#idleRounds >= IDLE_LIMIT) {
-      this.#status = "exhausted";
+    const now = this.#now();
+
+    // Exhausted feeds have no timer running. A later YouTube mutation may add
+    // a replacement sentinel without changing the card count, so probe once
+    // when such a scan reaches us. `triggerContinuation` guarantees that this
+    // can never reactivate the old sentinel. A successful probe starts a fresh
+    // bounded wait; a failed one remains exhausted and schedules no loop.
+    if (this.#status === "exhausted" && !grew) {
+      if (
+        this.#rounds < this.#maxRounds &&
+        this.#requestMore(input.allowScroll)
+      ) {
+        this.#rounds += 1;
+        this.#idleRounds = 0;
+        this.#awaitingGrowth = true;
+        this.#lastRunAt = now;
+        this.#status = "loading";
+      }
       return this.#status;
     }
 
-    const now = this.#now();
+    // A feed that was satisfied can become sparse again when YouTube recycles
+    // or removes cards. Treat that as loading even during the interval grace,
+    // otherwise no follow-up scan would be scheduled.
+    if (this.#status === "satisfied") this.#status = "loading";
+
     if (now - this.#lastRunAt < MIN_INTERVAL_MS) {
       // Still waiting for the last request to land.
       return this.#status === "idle" ? "loading" : this.#status;
     }
 
-    // No growth since the last round means YouTube is not producing more —
-    // either the feed is finished or the continuation never fired.
-    if (this.#lastTotal >= 0 && input.total <= this.#lastTotal) {
+    let countedIdle = false;
+
+    // One elapsed wait with no cards is one idle observation. In particular,
+    // the failed probe of an already-claimed sentinel below must not count as
+    // a second idle round in the same update.
+    if (this.#awaitingGrowth && !grew) {
+      this.#awaitingGrowth = false;
       this.#idleRounds += 1;
-    } else {
-      this.#idleRounds = 0;
+      countedIdle = true;
     }
 
-    this.#lastTotal = input.total;
     this.#lastRunAt = now;
-    this.#rounds += 1;
 
-    const asked = this.#requestMore(input.allowScroll);
-    if (!asked) this.#idleRounds += 1;
+    let asked = false;
+    if (this.#rounds < this.#maxRounds) {
+      asked = this.#requestMore(input.allowScroll);
+      if (asked) {
+        this.#rounds += 1;
+        this.#idleRounds = 0;
+        this.#awaitingGrowth = true;
+      } else if (!grew && !countedIdle) {
+        this.#idleRounds += 1;
+      }
+    } else if (!grew && !countedIdle) {
+      // The request budget is spent, but retain the same bounded grace period
+      // for the final in-flight response before declaring exhaustion.
+      this.#idleRounds += 1;
+    }
 
     debug(
       `backfill round ${this.#rounds}: visible=${input.visible} total=${input.total} ` +
-        `idle=${this.#idleRounds} asked=${asked}`
+        `idle=${this.#idleRounds} awaiting=${this.#awaitingGrowth} asked=${asked}`
     );
 
     this.#status = this.#idleRounds >= IDLE_LIMIT ? "exhausted" : "loading";
@@ -175,9 +256,14 @@ export class Backfill {
  * from something they were reading.
  */
 export function triggerContinuation(allowScroll: boolean): boolean {
-  const sentinels = document.querySelectorAll<HTMLElement>(CONTINUATION_SELECTOR);
-  const sentinel = sentinels[sentinels.length - 1];
+  const sentinel = currentContinuation();
   if (!sentinel) return false;
+  if (triggeredContinuations.has(sentinel)) return false;
+
+  // Claim the sentinel before dispatching any events. YouTube can synchronously
+  // mutate the feed in response to scroll, and a nested scan must still see it
+  // as already activated.
+  triggeredContinuations.add(sentinel);
 
   if (allowScroll && typeof sentinel.scrollIntoView === "function") {
     try {
@@ -192,4 +278,13 @@ export function triggerContinuation(allowScroll: boolean): boolean {
   // observing intersection.
   window.dispatchEvent(new Event("scroll"));
   return true;
+}
+
+function currentContinuation(): HTMLElement | null {
+  const sentinels = document.querySelectorAll<HTMLElement>(CONTINUATION_SELECTOR);
+  for (let index = sentinels.length - 1; index >= 0; index -= 1) {
+    const sentinel = sentinels[index];
+    if (sentinel && !isInInactiveTree(sentinel)) return sentinel;
+  }
+  return null;
 }

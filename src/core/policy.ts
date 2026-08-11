@@ -33,7 +33,7 @@ import type {
 export function classifyVideo(
   publishedDate: CalendarDate | null,
   settings: Pick<Settings, "virtualDate"> & Partial<Pick<Settings, "rangeStart">>
-): Exclude<CardState, "pending"> {
+): Exclude<CardState, "pending" | "duplicate"> {
   if (publishedDate === null) return "unknown";
   if (!isValidCalendarDate(publishedDate)) return "unknown";
   if (!isValidCalendarDate(settings.virtualDate)) {
@@ -74,6 +74,8 @@ export function shouldHide(
     case "before":
       return true;
     case "pending":
+      return true;
+    case "duplicate":
       return true;
     case "unknown":
       return settings.unknownPolicy === "hide";

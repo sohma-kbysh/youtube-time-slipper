@@ -27,10 +27,15 @@ import type { CalendarDate, Settings, VideoId } from "../core/types.js";
 import { defaultSettings, loadSettings, onSettingsChanged } from "../storage/settings.js";
 import {
   detectPageSurface,
+  isInInactiveTree,
   readDocumentPublicationMeta,
   readPageContext
 } from "./adapters.js";
-import { Backfill } from "./backfill.js";
+import {
+  Backfill,
+  MIN_INTERVAL_MS as BACKFILL_INTERVAL_MS,
+  resetContinuationTracking
+} from "./backfill.js";
 import {
   removeDiscovery as removeHistoricalFeed,
   renderDiscovery as renderHistoricalFeed,
@@ -63,6 +68,15 @@ import {
 
 const SCAN_DEBOUNCE_MS = 100;
 
+/** DOM owned by the extension must not recursively wake the page scanner. */
+const EXTENSION_UI_SELECTOR = [
+  ".time-slipper-feed-ui",
+  ".time-slipper-empty",
+  ".time-slipper-discover",
+  ".time-slipper-badge",
+  ".time-slipper-block"
+].join(", ");
+
 /** Back off this long after repeated messaging failures. */
 const RESOLUTION_BACKOFF_MS = 30_000;
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -78,8 +92,10 @@ let settingsLoaded = false;
  */
 const resolutions = new Map<VideoId, CalendarDate | null>();
 const requested = new Set<VideoId>();
+const resolutionsInFlight = new Set<VideoId>();
 
 let scanTimer: number | null = null;
+let scanDueAt = 0;
 let lastHref = "";
 let consecutiveFailures = 0;
 let backoffUntil = 0;
@@ -114,6 +130,8 @@ let historicalVideos: Array<{
   channelTitle?: string;
 }> = [];
 let historicalSource: "api" | "related" | "none" = "none";
+/** Invalidates async discovery results after navigation/settings/refresh. */
+let historicalGeneration = 0;
 
 /** Surfaces where refilling makes sense; a watch page is not a feed. */
 const FEED_SURFACES = new Set(["home", "search", "subscriptions", "channel", "playlists"]);
@@ -175,11 +193,13 @@ export function stop(): void {
   if (scanTimer !== null) {
     clearTimeout(scanTimer);
     scanTimer = null;
+    scanDueAt = 0;
   }
 
   settingsLoaded = false;
   resolutions.clear();
   requested.clear();
+  resolutionsInFlight.clear();
   lastHref = "";
 
   teardown();
@@ -209,9 +229,7 @@ function applySettings(options: { rescan: boolean }): void {
   guardedVideoId = null;
   backfill.reset();
   // A different window means different discoveries are possible.
-  historicalFeedDone = false;
-  historicalVideos = [];
-  historicalSource = "none";
+  resetHistoricalState();
   resolutionRateLimited = false;
   if (options.rescan) scheduleScan(true);
 }
@@ -221,11 +239,7 @@ function teardown(): void {
   resetShelves();
   resetEraFeatures();
   removeEmptyState();
-  removeHistoricalFeed();
-  historicalFeedDone = false;
-  historicalFeedRunning = false;
-  historicalVideos = [];
-  historicalSource = "none";
+  resetHistoricalState();
   resolutionRateLimited = false;
   clearRootFlags();
   removeBlockOverlay();
@@ -238,16 +252,22 @@ function teardown(): void {
 
 function observe(): void {
   observer?.disconnect();
-  observer = new MutationObserver(() => scheduleScan(false));
+  observer = new MutationObserver((records) => {
+    // Text and card updates inside our own panels used to trigger another
+    // scan, which rendered the panels again and created a permanent feedback
+    // loop. YouTube mutations still wake the scanner normally.
+    if (records.every(isExtensionUiMutation)) return;
+    scheduleScan(false);
+  });
 
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
-    // Only `href`: card elements are recycled by rewriting their links, and
-    // filtering this narrowly also stops our own state attribute from
-    // re-triggering the observer.
-    attributeFilter: ["href"]
+    // Links are rewritten when cards are recycled. Visibility attributes
+    // switch retained SPA pages between inactive and active; observing them
+    // prevents an old hidden page from affecting the current feed.
+    attributeFilter: ["href", "hidden", "aria-hidden", "inert"]
   });
 
   // YouTube's own navigation event. The observer would catch the resulting DOM
@@ -271,12 +291,22 @@ function observe(): void {
   });
 
   setHistoricalFeedRefreshHandler(() => {
-    historicalFeedDone = false;
-    historicalVideos = [];
-    historicalSource = "none";
+    resetHistoricalState();
     const { visible } = countVisibleCards(settings);
     void runHistoricalFeed(visible);
+    // The previous results were removed synchronously. Mount the stable
+    // loading panel in the same click task so there is no blank frame while
+    // the refreshed request is in flight.
+    scheduleScan(true);
   });
+}
+
+function isExtensionUiMutation(record: MutationRecord): boolean {
+  const target =
+    record.target instanceof Element
+      ? record.target
+      : record.target.parentElement;
+  return target?.closest(EXTENSION_UI_SELECTOR) != null;
 }
 
 function listen(target: EventTarget, type: string): void {
@@ -285,23 +315,37 @@ function listen(target: EventTarget, type: string): void {
   documentListeners.push([target, type, listener]);
 }
 
-function scheduleScan(immediate: boolean): void {
+function scheduleScan(
+  immediate: boolean,
+  delayMs: number = SCAN_DEBOUNCE_MS
+): void {
   if (!settingsLoaded) return;
 
   if (immediate) {
     if (scanTimer !== null) {
       clearTimeout(scanTimer);
       scanTimer = null;
+      scanDueAt = 0;
     }
     runScan();
     return;
   }
 
-  if (scanTimer !== null) return;
+  const dueAt = Date.now() + delayMs;
+  if (scanTimer !== null) {
+    // A backfill check may be parked for 700 ms. A real YouTube DOM mutation
+    // or a resolver response needs the normal 100 ms scan sooner, so replace a
+    // later timer instead of letting it make new cards look unresponsive.
+    if (dueAt >= scanDueAt) return;
+    clearTimeout(scanTimer);
+  }
+
+  scanDueAt = dueAt;
   scanTimer = window.setTimeout(() => {
     scanTimer = null;
+    scanDueAt = 0;
     runScan();
-  }, SCAN_DEBOUNCE_MS);
+  }, delayMs);
 }
 
 function runScan(): void {
@@ -341,23 +385,26 @@ function refillFeed(): void {
   collapseEmptyShelves(settings);
 
   const { visible, total } = countVisibleCards(settings);
+  const nativeVideoIds = currentNativeVideoIds();
 
   // A native card can arrive after the API response. Prefer YouTube's own card
   // and remove the generated duplicate from the historical grid.
   const deduplicated = historicalVideos.filter(
-    (video) => !resolutions.has(video.videoId)
+    (video) => !nativeVideoIds.has(video.videoId)
   );
   if (deduplicated.length !== historicalVideos.length) {
     historicalVideos = deduplicated;
-    renderHistoricalResults();
   }
+  if (historicalVideos.length > 0) renderHistoricalResults();
 
   const combinedVisible = visible + historicalVideos.length;
   const combinedTotal = total + historicalVideos.length;
 
   // Cards still being resolved are not failures yet; waiting avoids asking for
   // more the instant the page loads, before anything has had a chance to pass.
-  const stillResolving = requested.size > resolutions.size;
+  const stillResolving = [...nativeVideoIds].some(
+    (videoId) => resolutionsInFlight.has(videoId) || !resolutions.has(videoId)
+  );
 
   // Enough combined native/API cards always wins, even if unrelated native
   // cards are still resolving in the background.
@@ -383,10 +430,6 @@ function refillFeed(): void {
   }
 
   if (stillResolving) {
-    if (historicalFeedRunning) {
-      removeEmptyState();
-      return;
-    }
     renderEmptyState(
       {
         status: "loading",
@@ -403,7 +446,16 @@ function refillFeed(): void {
   // Historical search is the first refill source. It can directly ask for the
   // chosen era, unlike repeatedly loading today's recommendations.
   if (settings.discoverEra && !historicalFeedDone) {
-    removeEmptyState();
+    renderEmptyState(
+      {
+        status: "loading",
+        visible: combinedVisible,
+        total: combinedTotal,
+        virtualDate: settings.virtualDate,
+        rateLimited: false
+      },
+      t
+    );
     return;
   }
 
@@ -446,11 +498,32 @@ function refillFeed(): void {
 
   // Ask again shortly: the next batch arrives asynchronously, and the mutation
   // observer may not fire if YouTube appended nothing.
-  if (status === "loading") scheduleScan(false);
-
+  if (status === "loading") scheduleScan(false, BACKFILL_INTERVAL_MS);
 }
 
 // ---------------------------------------------------------- historical feed
+
+function currentNativeVideoIds(): Set<VideoId> {
+  const surface = detectPageSurface(window.location);
+  return new Set(
+    collectCandidates(document, surface, { readHints: false })
+      .filter(
+        (candidate) =>
+          !isInInactiveTree(candidate.element) &&
+          isSurfaceEnabled(candidate.surface, settings)
+      )
+      .map((candidate) => candidate.videoId)
+  );
+}
+
+function resetHistoricalState(): void {
+  historicalGeneration += 1;
+  historicalFeedRunning = false;
+  historicalFeedDone = false;
+  historicalVideos = [];
+  historicalSource = "none";
+  removeHistoricalFeed();
+}
 
 /**
  * Build the missing portion of the feed from an authoritative API period
@@ -460,15 +533,20 @@ async function runHistoricalFeed(nativeVisible: number): Promise<void> {
   if (!settings.discoverEra) return;
   if (historicalFeedRunning || historicalFeedDone) return;
 
+  const generation = historicalGeneration;
+  const requestHref = window.location.href;
+  const nativeVideoIds = currentNativeVideoIds();
+
   // Seeds are the videos already on the page that passed the filter: known to
   // be in the window, and close to what the user is actually looking at.
-  const seeds = [...resolutions.entries()]
-    .filter(([, date]) => date !== null && decideCardState(date, settings) === "visible")
-    .map(([videoId]) => videoId)
+  const seeds = [...nativeVideoIds]
+    .filter((videoId) => {
+      const date = resolutions.get(videoId);
+      return date != null && decideCardState(date, settings) === "visible";
+    })
     .slice(0, 12);
 
   historicalFeedRunning = true;
-  renderHistoricalFeed({ status: "searching" }, t);
 
   try {
     // What the page is about, so the API can be asked the era version of
@@ -481,13 +559,24 @@ async function runHistoricalFeed(nativeVisible: number): Promise<void> {
       start: settings.rangeStart,
       end: settings.virtualDate,
       limit: Math.max(1, backfill.targetVisible - nativeVisible),
-      exclude: [...resolutions.keys()],
+      // Include pending native cards too. The old code excluded only resolved
+      // ids, so a fast historical response could briefly render a second copy
+      // of a native card and then remove it when its date arrived.
+      exclude: [...nativeVideoIds],
       ...context
     });
 
+    if (
+      generation !== historicalGeneration ||
+      requestHref !== window.location.href
+    ) {
+      return;
+    }
     if (!isEraDiscoveredResponse(response)) throw new Error("unexpected response");
 
-    const seen = new Set<VideoId>(resolutions.keys());
+    // YouTube can add cards while the API request is in flight. Re-read the
+    // live DOM before rendering, then deduplicate the response itself as well.
+    const seen = currentNativeVideoIds();
     historicalVideos = response.videos.filter((video) => {
       if (seen.has(video.videoId)) return false;
       if (decideCardState(video.publishedDate, settings) !== "visible") return false;
@@ -498,14 +587,22 @@ async function runHistoricalFeed(nativeVisible: number): Promise<void> {
     historicalFeedDone = true;
     renderHistoricalResults();
   } catch (error) {
+    if (
+      generation !== historicalGeneration ||
+      requestHref !== window.location.href
+    ) {
+      return;
+    }
     debug("discovery failed", error);
     historicalVideos = [];
     historicalSource = "none";
     historicalFeedDone = true;
     removeHistoricalFeed();
   } finally {
-    historicalFeedRunning = false;
-    scheduleScan(true);
+    if (generation === historicalGeneration) {
+      historicalFeedRunning = false;
+      scheduleScan(true);
+    }
   }
 }
 
@@ -537,12 +634,10 @@ function detectNavigation(): void {
   // A new page gets a fresh refill budget, and the user starts at the top of
   // it, so it is fair to scroll for them again.
   backfill.reset();
+  resetContinuationTracking();
   userHasScrolled = false;
   removeEmptyState();
-  removeHistoricalFeed();
-  historicalFeedDone = false;
-  historicalVideos = [];
-  historicalSource = "none";
+  resetHistoricalState();
   resolutionRateLimited = false;
 
   const videoId = currentWatchVideoId(window.location);
@@ -560,11 +655,28 @@ function evaluateCards(): void {
   const candidates = collectCandidates(document, pageSurface);
 
   const pending: CardCandidate[] = [];
+  const primaryByVideoId = choosePrimaryCards(candidates);
 
   for (const candidate of candidates) {
+    if (isInInactiveTree(candidate.element)) {
+      // YouTube keeps previous SPA pages in the document with a hidden/inert
+      // ancestor. They are not current feed inventory and must not satisfy the
+      // visible target or win duplicate selection.
+      resetCard(candidate.element);
+      continue;
+    }
+
     if (!isSurfaceEnabled(candidate.surface, settings)) {
       // The user has opted this surface out; hand the card back to YouTube.
       resetCard(candidate.element);
+      continue;
+    }
+
+    // YouTube can return the same video more than once while several
+    // continuation loads overlap. Prefer the active SPA page, then DOM order,
+    // and hide the other copies.
+    if (primaryByVideoId.get(candidate.videoId) !== candidate.element) {
+      applyCardState(candidate.element, candidate.videoId, "duplicate");
       continue;
     }
 
@@ -588,16 +700,49 @@ function evaluateCards(): void {
     const counts = countStates();
     debug(
       `cards=${candidates.length} visible=${counts.visible} future=${counts.future} ` +
-        `unknown=${counts.unknown} pending=${counts.pending}`
+        `unknown=${counts.unknown} pending=${counts.pending} duplicate=${counts.duplicate}`
     );
   }
 }
 
+/**
+ * Pick the copy that belongs to the active SPA page when YouTube has retained
+ * a hidden previous page in the document. Among equally active copies, DOM
+ * order remains the stable tie-breaker.
+ */
+function choosePrimaryCards(candidates: CardCandidate[]): Map<VideoId, HTMLElement> {
+  const primary = new Map<VideoId, HTMLElement>();
+
+  for (const candidate of candidates) {
+    if (
+      isInInactiveTree(candidate.element) ||
+      !isSurfaceEnabled(candidate.surface, settings)
+    ) {
+      continue;
+    }
+
+    if (!primary.has(candidate.videoId)) {
+      primary.set(candidate.videoId, candidate.element);
+    }
+  }
+
+  return primary;
+}
+
 async function requestResolutions(videoIds: VideoId[]): Promise<void> {
-  if (Date.now() < backoffUntil) return;
+  const backoffRemaining = backoffUntil - Date.now();
+  if (backoffRemaining > 0) {
+    // A quiet page may not mutate again. Keep one wake-up parked at the end of
+    // the backoff so pending cards cannot remain hidden forever.
+    scheduleScan(false, backoffRemaining);
+    return;
+  }
 
   const batch = videoIds.slice(0, MAX_VIDEO_IDS_PER_REQUEST);
-  for (const videoId of batch) requested.add(videoId);
+  for (const videoId of batch) {
+    requested.add(videoId);
+    resolutionsInFlight.add(videoId);
+  }
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -610,7 +755,7 @@ async function requestResolutions(videoIds: VideoId[]): Promise<void> {
     }
 
     consecutiveFailures = 0;
-    resolutionRateLimited = response.resolverStatus === "html-rate-limited";
+    resolutionRateLimited ||= response.resolverStatus === "html-rate-limited";
 
     for (const [videoId, resolution] of Object.entries(response.results)) {
       resolutions.set(videoId, resolution.publishedDate ?? null);
@@ -622,8 +767,6 @@ async function requestResolutions(videoIds: VideoId[]): Promise<void> {
       if (!(videoId in response.results)) requested.delete(videoId);
     }
 
-    evaluateCards();
-    evaluateWatchPage();
   } catch (error) {
     // The worker restarts, and the whole extension context is torn down on
     // reload; both surface here. Let the ids be retried, but back off so a
@@ -636,6 +779,11 @@ async function requestResolutions(videoIds: VideoId[]): Promise<void> {
       consecutiveFailures = 0;
       debug("resolution backoff engaged", error);
     }
+  } finally {
+    for (const videoId of batch) resolutionsInFlight.delete(videoId);
+    // Do not rely on mutations caused by our own UI to refresh the refill
+    // state. Once resolution settles, explicitly schedule one complete scan.
+    scheduleScan(false);
   }
 }
 

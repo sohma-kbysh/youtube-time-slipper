@@ -26,11 +26,15 @@ import { STATE_ATTR } from "../src/content/visibility";
 const OLD_VIDEO = "AAAAAAAAAAA";
 const NEW_VIDEO = "BBBBBBBBBBB";
 const UNDATED_VIDEO = "CCCCCCCCCCC";
+const APPENDED_VIDEO = "FFFFFFFFFFF";
+const RECYCLED_VIDEO = "GGGGGGGGGGG";
 
 const DATES: Record<VideoId, string | null> = {
   [OLD_VIDEO]: "2008-04-03",
   [NEW_VIDEO]: "2018-03-01",
-  [UNDATED_VIDEO]: null
+  [UNDATED_VIDEO]: null,
+  [APPENDED_VIDEO]: "2019-04-01",
+  [RECYCLED_VIDEO]: "2020-05-02"
 };
 
 interface StorageListener {
@@ -61,10 +65,12 @@ function installChromeStub(
   resolutionOptions: {
     gate?: Promise<void>;
     status?: "html-rate-limited";
+    failuresBeforeSuccess?: number;
   } = {}
 ): void {
   storage = { settings: initial };
   storageListeners = [];
+  let resolutionFailuresRemaining = resolutionOptions.failuresBeforeSuccess ?? 0;
 
   // The stub answers both request types, so it is typed as the union the
   // content script actually sends.
@@ -84,6 +90,11 @@ function installChromeStub(
     }
 
     await resolutionOptions.gate;
+
+    if (resolutionFailuresRemaining > 0) {
+      resolutionFailuresRemaining -= 1;
+      throw new Error("temporary resolver failure");
+    }
 
     const results: Record<VideoId, PublicationResolution> = {};
 
@@ -135,10 +146,16 @@ function installChromeStub(
 }
 
 /** Let the boot promise, the message round trip and the debounce all land. */
+let settleWithFakeTimers = false;
+
 async function settle(): Promise<void> {
   for (let index = 0; index < 12; index += 1) {
     await Promise.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    if (settleWithFakeTimers) {
+      await vi.advanceTimersByTimeAsync(20);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
   }
 }
 
@@ -172,6 +189,7 @@ async function bootContentScript(
   resolutionOptions: {
     gate?: Promise<void>;
     status?: "html-rate-limited";
+    failuresBeforeSuccess?: number;
   } = {}
 ): Promise<void> {
   installChromeStub(settings, historicalVideos, resolutionOptions);
@@ -243,6 +261,42 @@ describe("content script, end to end", () => {
     expect(new Set(asked)).toEqual(new Set([OLD_VIDEO, NEW_VIDEO, UNDATED_VIDEO]));
   });
 
+  it("retries pending cards when resolver backoff expires on a quiet page", async () => {
+    vi.useFakeTimers();
+    settleWithFakeTimers = true;
+
+    try {
+      await bootContentScript(
+        {
+          enabled: true,
+          virtualDate: "2012-08-12",
+          fillFeed: false,
+          discoverEra: false
+        },
+        feed(),
+        [],
+        { failuresBeforeSuccess: 3 }
+      );
+
+      const resolutionCalls = () => sendMessage.mock.calls.filter(
+        (call) => (call[0] as ExtensionRequest).type === MESSAGE_RESOLVE_VIDEO_DATES
+      ).length;
+      expect(resolutionCalls()).toBe(3);
+      expect(stateOf("old")).toBe("pending");
+
+      await vi.advanceTimersByTimeAsync(31_000);
+
+      expect(resolutionCalls()).toBeGreaterThan(3);
+      expect(stateOf("old")).toBe("visible");
+      expect(stateOf("new")).toBe("future");
+    } finally {
+      stopContentScript?.();
+      stopContentScript = null;
+      settleWithFakeTimers = false;
+      vi.useRealTimers();
+    }
+  });
+
   it("does nothing at all while disabled", async () => {
     await bootContentScript({ enabled: false, virtualDate: "2012-08-12" });
 
@@ -303,7 +357,7 @@ describe("content script, end to end", () => {
 
     const appended = document.createElement("ytd-rich-item-renderer");
     appended.id = "appended";
-    appended.innerHTML = `<a href="/watch?v=${NEW_VIDEO}">new</a>`;
+    appended.innerHTML = `<a href="/watch?v=${APPENDED_VIDEO}">new</a>`;
     document.body.appendChild(appended);
 
     await settle();
@@ -317,7 +371,7 @@ describe("content script, end to end", () => {
 
     document
       .querySelector("#old a")!
-      .setAttribute("href", `/watch?v=${NEW_VIDEO}`);
+      .setAttribute("href", `/watch?v=${RECYCLED_VIDEO}`);
 
     await settle();
 
@@ -416,11 +470,19 @@ describe("a feed that filtering empties", () => {
   });
 
   it("explains the sparse page instead of leaving it blank", async () => {
-    await bootContentScript({ enabled: true, virtualDate: "2012-08-12" }, feedWithShelf());
+    await bootContentScript(
+      {
+        enabled: true,
+        virtualDate: "2012-08-12",
+        fillFeed: false,
+        discoverEra: false
+      },
+      feedWithShelf()
+    );
 
     const panel = document.querySelector(".time-slipper-empty");
     expect(panel).not.toBeNull();
-    expect(panel?.textContent).toContain("Not much of this page exists yet");
+    expect(panel?.textContent).toContain("Few videos match this date");
     expect(panel?.querySelector("button")?.textContent).toBe("Load more");
   });
 
@@ -467,11 +529,23 @@ describe("a feed that filtering empties", () => {
 
     expect(document.querySelectorAll(".time-slipper-discover__card")).toHaveLength(15);
     expect(document.querySelector(".time-slipper-empty")).toBeNull();
-    expect(document.querySelector("[data-time-slipper-historical-feed]")?.textContent)
+    const historicalShelf = document.querySelector(
+      "[data-time-slipper-historical-feed]"
+    );
+    expect(historicalShelf?.textContent)
       .toContain("Time Slipper historical results");
+
+    // YouTube replaces feed renderers during SPA updates. The historical UI
+    // must reconnect on the next scan instead of being counted while detached.
+    document.body.innerHTML = datedFeed(nativeIds);
+    await settle();
+    expect(document.querySelector("[data-time-slipper-historical-feed]")).toBe(
+      historicalShelf
+    );
+    expect(document.querySelectorAll(".time-slipper-discover__card")).toHaveLength(15);
   });
 
-  it("shows the sparse panel only after the historical source is exhausted", async () => {
+  it("keeps one stable status panel while the historical source finishes", async () => {
     let finishSearch!: (videos: typeof DEFAULT_HISTORICAL_VIDEOS) => void;
     const pendingSearch = new Promise<typeof DEFAULT_HISTORICAL_VIDEOS>((resolve) => {
       finishSearch = resolve;
@@ -488,12 +562,15 @@ describe("a feed that filtering empties", () => {
       pendingSearch
     );
 
-    expect(document.querySelector(".time-slipper-empty")).toBeNull();
+    const panel = document.querySelector(".time-slipper-empty");
+    expect(panel).not.toBeNull();
+    expect(panel?.getAttribute("data-state")).toBe("loading");
 
     finishSearch([]);
     await settle();
 
-    expect(document.querySelector(".time-slipper-empty")).not.toBeNull();
+    expect(document.querySelector(".time-slipper-empty")).toBe(panel);
+    expect(panel?.getAttribute("data-state")).toBe("exhausted");
   });
 
   it("starts the API historical feed while native date resolution is still pending", async () => {
@@ -515,6 +592,80 @@ describe("a feed that filtering empties", () => {
       (call) => (call[0] as ExtensionRequest).type === MESSAGE_DISCOVER_ERA
     )).toBe(true);
     expect(document.querySelectorAll(".time-slipper-discover__card")).toHaveLength(2);
+
+    const discovery = sendMessage.mock.calls
+      .map((call) => call[0] as ExtensionRequest)
+      .find((request) => request.type === MESSAGE_DISCOVER_ERA);
+    expect(discovery?.type === MESSAGE_DISCOVER_ERA ? discovery.exclude : []).toEqual(
+      expect.arrayContaining([OLD_VIDEO, NEW_VIDEO])
+    );
+  });
+
+  it("never renders a historical duplicate of a pending native card", async () => {
+    const nativeResolution = new Promise<void>(() => {});
+    const overlapping = [{
+      videoId: NEW_VIDEO,
+      title: "duplicate pending native video",
+      publishedDate: "2011-06-01"
+    }];
+
+    await bootContentScript(
+      {
+        enabled: true,
+        virtualDate: "2012-08-12",
+        fillFeed: false,
+        apiKey: "AIzaConfiguredKey"
+      },
+      feedWithShelf(),
+      overlapping,
+      { gate: nativeResolution }
+    );
+
+    expect(document.querySelectorAll(".time-slipper-discover__card")).toHaveLength(0);
+  });
+
+  it("hides repeated native cards with the same video id", async () => {
+    await bootContentScript(
+      {
+        enabled: true,
+        virtualDate: "2012-08-12",
+        fillFeed: false,
+        discoverEra: false
+      },
+      `<div id="contents">
+        <ytd-rich-item-renderer id="copy-one"><a href="/watch?v=${OLD_VIDEO}">one</a></ytd-rich-item-renderer>
+        <ytd-rich-item-renderer id="copy-two"><a href="/watch?v=${OLD_VIDEO}">two</a></ytd-rich-item-renderer>
+      </div>`
+    );
+
+    expect(stateOf("copy-one")).toBe("visible");
+    expect(stateOf("copy-two")).toBe("duplicate");
+  });
+
+  it("prefers the current SPA page over an earlier hidden copy", async () => {
+    await bootContentScript(
+      {
+        enabled: true,
+        virtualDate: "2012-08-12",
+        fillFeed: false,
+        discoverEra: false
+      },
+      `<div id="old-page" hidden>
+        <ytd-rich-item-renderer id="old-copy"><a href="/watch?v=${OLD_VIDEO}">old page</a></ytd-rich-item-renderer>
+      </div>
+      <div id="current-page">
+        <ytd-rich-item-renderer id="current-copy"><a href="/watch?v=${OLD_VIDEO}">current page</a></ytd-rich-item-renderer>
+      </div>`
+    );
+
+    expect(stateOf("old-copy")).toBeNull();
+    expect(stateOf("current-copy")).toBe("visible");
+
+    (document.querySelector("#old-page") as HTMLElement).hidden = false;
+    (document.querySelector("#current-page") as HTMLElement).hidden = true;
+    await settle();
+    expect(stateOf("old-copy")).toBe("visible");
+    expect(stateOf("current-copy")).toBeNull();
   });
 
   it("shows a distinct message when the HTML resolver is rate-limited", async () => {
@@ -715,6 +866,44 @@ describe("finding videos outside what YouTube recommended", () => {
     expect(cards[0]?.getAttribute("href")).toBe("/watch?v=DDDDDDDDDDD");
   });
 
+  it("keeps a loading panel visible while historical results refresh", async () => {
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12", fillFeed: false, discoverEra: true },
+      sparseFeed()
+    );
+
+    let finishRefresh!: () => void;
+    const refreshGate = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const previousImplementation = sendMessage.getMockImplementation()!;
+    sendMessage.mockImplementation(async (request: ExtensionRequest) => {
+      if (request.type !== MESSAGE_DISCOVER_ERA) {
+        return previousImplementation(request);
+      }
+
+      await refreshGate;
+      return {
+        type: MESSAGE_ERA_DISCOVERED,
+        source: "api",
+        exhausted: true,
+        videos: DEFAULT_HISTORICAL_VIDEOS
+      };
+    });
+
+    const panel = document.querySelector<HTMLElement>(".time-slipper-empty")!;
+    document.querySelector<HTMLButtonElement>(
+      ".time-slipper-discover__refresh"
+    )!.click();
+
+    expect(document.contains(panel)).toBe(true);
+    expect(panel.dataset.state).toBe("loading");
+
+    finishRefresh();
+    await settle();
+    expect(document.querySelectorAll(".time-slipper-discover__card")).toHaveLength(2);
+  });
+
   it("walks out from videos that are inside the window", async () => {
     await bootContentScript(
       { enabled: true, virtualDate: "2012-08-12", fillFeed: false, discoverEra: true },
@@ -749,6 +938,25 @@ describe("finding videos outside what YouTube recommended", () => {
     await settle();
 
     expect(discoveryRequests()).toHaveLength(1);
+  });
+
+  it("discards a historical response after discovery is switched off", async () => {
+    let finishSearch!: (videos: typeof DEFAULT_HISTORICAL_VIDEOS) => void;
+    const pendingSearch = new Promise<typeof DEFAULT_HISTORICAL_VIDEOS>((resolve) => {
+      finishSearch = resolve;
+    });
+
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12", fillFeed: false, discoverEra: true },
+      sparseFeed(),
+      pendingSearch
+    );
+
+    await updateSettings({ discoverEra: false });
+    finishSearch(DEFAULT_HISTORICAL_VIDEOS);
+    await settle();
+
+    expect(document.querySelector(".time-slipper-discover")).toBeNull();
   });
 
   it("removes the shelf when the extension is switched off", async () => {

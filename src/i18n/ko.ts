@@ -91,14 +91,14 @@ export const ko: Catalog = {
   "block.unknown": "알 수 없음",
   "block.goBack": "돌아가기",
 
-  "feed.sparseTitle": "이 페이지에는 아직 볼 것이 거의 없습니다.",
+  "feed.sparseTitle": "이 날짜에 맞는 동영상이 많지 않습니다.",
   "feed.sparseBody":
-    "YouTube는 오늘의 동영상을 추천하며, 대부분은 {date} 이후에 게시된 것입니다. 더 불러오면 조금 나아지지만, 가상의 현재가 과거일수록 찾을 수 있는 동영상은 줄어듭니다.",
+    "{date} 이후에 게시된 동영상은 숨겨집니다. 조건에 맞는 동영상을 더 찾을 수 있습니다.",
   "feed.loadMore": "더 불러오기",
-  "feed.loading": "더 오래된 동영상을 찾는 중…",
+  "feed.loading": "게시 날짜를 확인하는 중…",
   "feed.rateLimitedTitle": "YouTube가 자동 조회를 일시적으로 제한하고 있습니다.",
   "feed.rateLimitedBody": "YouTube Data API 키를 설정하면 게시일을 일괄 확인할 수 있습니다.",
   "feed.exhausted":
-    "이 페이지에 대해 YouTube가 더 제공할 동영상이 없습니다. 가상의 현재를 더 나중으로 옮기거나, 구체적인 검색어로 찾아보세요.",
+    "이 페이지에서 조건에 맞는 동영상을 더 찾지 못했습니다. 날짜를 늦추거나 더 구체적으로 검색해 보세요.",
   "feed.visibleCount": "이 페이지의 동영상 {total}개 중 {visible}개가 타임라인 안에 있습니다."
 };

@@ -87,6 +87,11 @@ export const FEED_CONTAINER_SELECTOR = [
   "#contents"
 ].join(", ");
 
+/** True when an element belongs to an inactive page retained by YouTube's SPA. */
+export function isInInactiveTree(element: Element): boolean {
+  return element.closest('[hidden], [aria-hidden="true"], [inert]') !== null;
+}
+
 /** Elements carrying the card's metadata line ("3 years ago", "3 年前"). */
 export const METADATA_TEXT_SELECTOR = [
   "#metadata-line",

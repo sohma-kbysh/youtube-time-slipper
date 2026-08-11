@@ -92,15 +92,15 @@ export const es: Catalog = {
   "block.unknown": "desconocida",
   "block.goBack": "Volver",
 
-  "feed.sparseTitle": "De esta página todavía no existe casi nada.",
+  "feed.sparseTitle": "Pocos vídeos coinciden con esta fecha.",
   "feed.sparseBody":
-    "YouTube recomienda vídeos de hoy, y la mayoría se publicaron después del {date}. Cargar más ayuda, pero cuanto más atrás esté tu presente virtual, menos habrá que encontrar.",
+    "Se ocultan los vídeos publicados después del {date}. Puedes buscar más vídeos que coincidan.",
   "feed.loadMore": "Cargar más",
-  "feed.loading": "Buscando vídeos más antiguos…",
+  "feed.loading": "Comprobando fechas de publicación…",
   "feed.rateLimitedTitle": "YouTube limita temporalmente las consultas automáticas.",
   "feed.rateLimitedBody": "Configura una clave de YouTube Data API para consultar fechas por lotes.",
   "feed.exhausted":
-    "YouTube no tiene más vídeos que ofrecer para esta página. Prueba con un presente virtual más reciente o busca algo concreto.",
+    "No se encontraron más vídeos coincidentes en esta página. Prueba una fecha posterior o una búsqueda más concreta.",
   "feed.visibleCount":
     "{visible} de los {total} vídeos de esta página pertenecen a tu línea temporal."
 };

@@ -101,16 +101,16 @@ export const en = {
   "block.unknown": "unknown",
   "block.goBack": "Go Back",
 
-  "feed.sparseTitle": "Not much of this page exists yet.",
+  "feed.sparseTitle": "Few videos match this date.",
   "feed.sparseBody":
-    "YouTube recommends today's videos, and most of them were published after {date}. Loading more helps, but the further back your virtual present is, the less there is to find.",
+    "Videos published after {date} are hidden. You can look for more videos that match.",
   "feed.loadMore": "Load more",
-  "feed.loading": "Looking for older videos…",
+  "feed.loading": "Checking publication dates…",
   "feed.rateLimitedTitle": "YouTube is temporarily limiting automatic lookups.",
   "feed.rateLimitedBody":
     "Set a YouTube Data API key to check publication dates in batches without fetching each video page.",
   "feed.exhausted":
-    "YouTube has no more videos to offer for this page. Try a later virtual present, or search for something specific.",
+    "No more matching videos were found on this page. Try a later date or a more specific search.",
   "feed.visibleCount": "{visible} of {total} videos on this page are from your timeline."
 } as const;
 

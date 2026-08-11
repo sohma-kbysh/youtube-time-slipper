@@ -26,7 +26,14 @@ export function isHiddenState(
   state: string | null,
   settings: Pick<Settings, "unknownPolicy">
 ): boolean {
-  if (state === "future" || state === "before" || state === "pending") return true;
+  if (
+    state === "future" ||
+    state === "before" ||
+    state === "pending" ||
+    state === "duplicate"
+  ) {
+    return true;
+  }
   if (state === "unknown") return settings.unknownPolicy === "hide";
   return false;
 }
@@ -85,9 +92,17 @@ export function countVisibleCards(
   const cards = root.querySelectorAll<HTMLElement>(`[${STATE_ATTR}]`);
 
   let visible = 0;
+  let total = 0;
   for (const card of cards) {
-    if (!isHiddenState(card.getAttribute(STATE_ATTR), settings)) visible += 1;
+    const state = card.getAttribute(STATE_ATTR);
+    // A duplicate is not another piece of feed inventory. Excluding it from
+    // both numbers prevents a repeated renderer from satisfying the refill
+    // target or looking like progress from a continuation request.
+    if (state === "duplicate") continue;
+
+    total += 1;
+    if (!isHiddenState(state, settings)) visible += 1;
   }
 
-  return { visible, total: cards.length };
+  return { visible, total };
 }

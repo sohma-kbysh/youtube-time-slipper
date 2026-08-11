@@ -42,7 +42,8 @@ export function needsEvaluation(element: HTMLElement, videoId: VideoId): boolean
   const previous = tracked.get(element);
   if (!previous) return true;
   if (previous.videoId !== videoId) return true;
-  return previous.state === "pending";
+  // A duplicate can become the primary when the earlier renderer is removed.
+  return previous.state === "pending" || previous.state === "duplicate";
 }
 
 export function applyCardState(
@@ -51,6 +52,7 @@ export function applyCardState(
   state: CardState
 ): void {
   const previous = tracked.get(element);
+
   if (previous && previous.videoId === videoId && previous.state === state) {
     return;
   }
@@ -115,7 +117,8 @@ export function countStates(root: ParentNode = document): Record<CardState, numb
     visible: 0,
     future: 0,
     before: 0,
-    unknown: 0
+    unknown: 0,
+    duplicate: 0
   };
 
   for (const element of root.querySelectorAll<HTMLElement>(`[${STATE_ATTR}]`)) {

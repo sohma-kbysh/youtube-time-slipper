@@ -135,4 +135,10 @@ export interface PublicationResolution {
  * in between discovery and resolution, and it is hidden, so that a future video
  * is never painted before we know what it is.
  */
-export type CardState = "pending" | "visible" | "future" | "before" | "unknown";
+export type CardState =
+  | "pending"
+  | "visible"
+  | "future"
+  | "before"
+  | "unknown"
+  | "duplicate";

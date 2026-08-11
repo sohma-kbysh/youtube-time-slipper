@@ -13,7 +13,7 @@
 
 import type { Translator } from "../core/i18n.js";
 import type { CalendarDate, VideoId } from "../core/types.js";
-import { FEED_CONTAINER_SELECTOR } from "./adapters.js";
+import { mountFeedUi, setTextIfChanged, unmountFeedUi } from "./feed-ui.js";
 
 const SHELF_CLASS = "time-slipper-discover";
 
@@ -32,6 +32,7 @@ export type DiscoveryState =
 
 let shelf: HTMLElement | null = null;
 let onRefresh: (() => void) | null = null;
+let renderedGridKey: string | null = null;
 
 export function setDiscoverRefreshHandler(handler: () => void): void {
   onRefresh = handler;
@@ -47,54 +48,73 @@ export function renderDiscovery(state: DiscoveryState, t: Translator): void {
     return;
   }
 
-  const container = document.querySelector<HTMLElement>(FEED_CONTAINER_SELECTOR);
-  if (!container) return;
-
   if (!shelf) shelf = createShelf(t);
-  if (shelf.parentElement !== container) container.prepend(shelf);
+  if (!mountFeedUi(shelf)) return;
 
   const title = shelf.querySelector(`.${SHELF_CLASS}__title`);
   const note = shelf.querySelector(`.${SHELF_CLASS}__note`);
   const grid = shelf.querySelector(`.${SHELF_CLASS}__grid`);
   const button = shelf.querySelector<HTMLButtonElement>(`.${SHELF_CLASS}__refresh`);
 
-  if (title) title.textContent = t("discover.title");
+  setTextIfChanged(title, t("discover.title"));
   if (button) {
-    button.textContent = t("discover.refresh");
-    button.disabled = state.status === "searching";
+    setTextIfChanged(button, t("discover.refresh"));
+    const disabled = state.status === "searching";
+    if (button.disabled !== disabled) button.disabled = disabled;
   }
 
-  if (note) {
-    note.textContent =
-      state.status === "searching"
-        ? t("discover.searching")
-        : state.status === "empty"
-          ? t("discover.none")
-          : state.status === "results" && state.source === "api"
-            ? t("discover.subtitleApi")
-            : t("discover.subtitle");
-  }
+  const noteText =
+    state.status === "searching"
+      ? t("discover.searching")
+      : state.status === "empty"
+        ? t("discover.none")
+        : state.status === "results" && state.source === "api"
+          ? t("discover.subtitleApi")
+          : t("discover.subtitle");
+  setTextIfChanged(note, noteText);
+
+  const busy = state.status === "searching" ? "true" : "false";
+  if (shelf.getAttribute("aria-busy") !== busy) shelf.setAttribute("aria-busy", busy);
 
   if (!grid) return;
 
-  grid.textContent = "";
-  if (state.status !== "results") return;
-
-  for (const video of state.videos) {
-    grid.appendChild(createCard(video, t));
+  if (state.status !== "results") {
+    if (grid.childElementCount > 0) grid.replaceChildren();
+    renderedGridKey = null;
+    return;
   }
+
+  const gridKey = JSON.stringify([
+    t.language,
+    state.videos.map((video) => [
+      video.videoId,
+      video.title,
+      video.publishedDate,
+      video.channelTitle ?? null
+    ])
+  ]);
+  if (gridKey === renderedGridKey) return;
+
+  const cards = document.createDocumentFragment();
+  for (const video of state.videos) {
+    cards.appendChild(createCard(video, t));
+  }
+  grid.replaceChildren(cards);
+  renderedGridKey = gridKey;
 }
 
 function createShelf(t: Translator): HTMLElement {
   const element = document.createElement("section");
   element.className = SHELF_CLASS;
   element.setAttribute("data-time-slipper-historical-feed", "");
+  element.setAttribute("aria-labelledby", `${SHELF_CLASS}-title`);
 
   const header = document.createElement("div");
   header.className = `${SHELF_CLASS}__header`;
 
   const heading = document.createElement("h2");
   heading.className = `${SHELF_CLASS}__title`;
+  heading.id = `${SHELF_CLASS}-title`;
 
   const refresh = document.createElement("button");
   refresh.type = "button";
@@ -142,6 +162,7 @@ function createCard(video: DiscoveredCard, t: Translator): HTMLElement {
 }
 
 export function removeDiscovery(): void {
-  shelf?.remove();
+  unmountFeedUi(shelf);
   shelf = null;
+  renderedGridKey = null;
 }

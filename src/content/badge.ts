@@ -66,8 +66,11 @@ export function updateBadge(settings: Settings, t: Translator): void {
   const label = badge.querySelector(`.${BADGE_CLASS}__label`);
   // The date stays in ISO form here: it is a fixed-width, unambiguous token in
   // a small badge, where a localised long date would wrap or be truncated.
-  if (label) label.textContent = `TIME SLIPPER · ${settings.virtualDate}`;
-  badge.title = t("badge.tooltip", { date: t.date(settings.virtualDate) });
+  const text = `TIME SLIPPER · ${settings.virtualDate}`;
+  if (label && label.textContent !== text) label.textContent = text;
+
+  const title = t("badge.tooltip", { date: t.date(settings.virtualDate) });
+  if (badge.title !== title) badge.title = title;
 }
 
 export function removeBadge(): void {

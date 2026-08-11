@@ -49,6 +49,41 @@ describe("applyCardState", () => {
 
     expect(element.getAttribute(STATE_ATTR)).toBe("future");
   });
+
+  it("hides a renderer explicitly classified as a duplicate", () => {
+    const primary = card();
+    const repeated = card();
+
+    applyCardState(primary, ID, "visible");
+    applyCardState(repeated, ID, "duplicate");
+
+    expect(getTracked(primary)?.state).toBe("visible");
+    expect(getTracked(repeated)?.state).toBe("duplicate");
+    expect(repeated.getAttribute(STATE_ATTR)).toBe("duplicate");
+  });
+
+  it("restores a duplicate state when it is reclassified as visible", () => {
+    const primary = card();
+    const repeated = card();
+
+    applyCardState(primary, ID, "visible");
+    applyCardState(repeated, ID, "duplicate");
+    primary.remove();
+    applyCardState(repeated, ID, "visible");
+
+    expect(getTracked(repeated)?.state).toBe("visible");
+  });
+
+  it("does not conflate different video ids", () => {
+    const first = card();
+    const second = card();
+
+    applyCardState(first, ID, "visible");
+    applyCardState(second, "BBBBBBBBBBB", "visible");
+
+    expect(getTracked(first)?.state).toBe("visible");
+    expect(getTracked(second)?.state).toBe("visible");
+  });
 });
 
 describe("resetting", () => {
@@ -97,15 +132,16 @@ describe("applyRootFlags", () => {
 describe("countStates", () => {
   it("tallies the page for the debug log", () => {
     applyCardState(card(), ID, "visible");
-    applyCardState(card(), ID, "future");
-    applyCardState(card(), ID, "future");
+    applyCardState(card(), "BBBBBBBBBBB", "future");
+    applyCardState(card(), ID, "duplicate");
 
     expect(countStates()).toEqual({
       pending: 0,
       visible: 1,
-      future: 2,
+      future: 1,
       before: 0,
-      unknown: 0
+      unknown: 0,
+      duplicate: 1
     });
   });
 });
