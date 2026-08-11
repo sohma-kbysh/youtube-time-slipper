@@ -13,7 +13,18 @@
  * a future video appearing for the half second before its date comes back.
  */
 html[data-time-slipper="on"] [data-time-slipper-state="pending"],
-html[data-time-slipper="on"] [data-time-slipper-state="future"] {
+html[data-time-slipper="on"] [data-time-slipper-state="future"],
+html[data-time-slipper="on"] [data-time-slipper-state="before"] {
+  display: none !important;
+}
+
+/*
+ * Interface elements that postdate the virtual present: the Shorts rail, the
+ * Playables entry, the chip bar. Filtering videos leaves the product itself
+ * looking like today, and a 2012 timeline with a Shorts shelf in it is not a
+ * 2012 timeline.
+ */
+html[data-time-slipper="on"] [data-time-slipper-era] {
   display: none !important;
 }
 
