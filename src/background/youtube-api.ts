@@ -17,7 +17,7 @@
  * deserves to know where they went.
  */
 
-import { calendarDateFromIso } from "../core/date.js";
+import { calendarDateFromIso, parseCalendarDate } from "../core/date.js";
 import { debug } from "../core/log.js";
 import type { CalendarDate, VideoId } from "../core/types.js";
 import { isValidVideoId } from "../content/video-id.js";
@@ -49,6 +49,8 @@ export interface EraSearchRequest {
   before: CalendarDate;
   order: EraSearchOrder;
   maxResults?: number;
+  /** Opaque continuation returned by the previous search page. */
+  pageToken?: string;
   /** Two-letter region and language hints, so results match the user. */
   regionCode?: string;
   relevanceLanguage?: string;
@@ -59,7 +61,9 @@ export interface EraSearchResult {
     videoId: VideoId;
     title: string;
     publishedDate: CalendarDate;
+    channelTitle?: string;
   }>;
+  nextPageToken?: string;
   quotaUnits: number;
 }
 
@@ -185,8 +189,8 @@ export function createYouTubeApi(deps: ApiDependencies = {}) {
   /**
    * Search a date range.
    *
-   * `publishedBefore` is set to the end of the day so the window's last day is
-   * included, matching the inclusive boundary used everywhere else.
+   * The API uses strict timestamp boundaries, so requests are expanded by one
+   * millisecond/day edge to preserve our inclusive calendar-date window.
    */
   async function searchEra(request: EraSearchRequest): Promise<EraSearchResult> {
     const params: Record<string, string> = {
@@ -194,22 +198,30 @@ export function createYouTubeApi(deps: ApiDependencies = {}) {
       type: "video",
       maxResults: String(Math.min(Math.max(request.maxResults ?? 25, 1), 50)),
       order: request.order,
-      publishedBefore: `${request.before}T23:59:59Z`,
+      // Both API parameters are strict inequalities. Use the start of the next
+      // day so every instant on the selected final calendar day is included.
+      publishedBefore: adjacentDayBoundary(request.before, 1),
       key: request.apiKey.trim()
     };
 
-    if (request.after) params["publishedAfter"] = `${request.after}T00:00:00Z`;
+    // One millisecond before the first day turns the API's strict "after"
+    // comparison into the inclusive calendar-date boundary used by policy.
+    if (request.after) {
+      params["publishedAfter"] = adjacentDayBoundary(request.after, 0, -1);
+    }
     if (request.query) params["q"] = request.query.slice(0, 200);
     if (request.channelId) params["channelId"] = request.channelId;
     if (request.regionCode) params["regionCode"] = request.regionCode;
     if (request.relevanceLanguage) {
       params["relevanceLanguage"] = request.relevanceLanguage;
     }
+    if (request.pageToken) params["pageToken"] = request.pageToken;
 
     const body = (await call("search", params)) as {
+      nextPageToken?: string;
       items?: Array<{
         id?: { videoId?: string };
-        snippet?: { title?: string; publishedAt?: string };
+        snippet?: { title?: string; publishedAt?: string; channelTitle?: string };
       }>;
     };
 
@@ -228,16 +240,37 @@ export function createYouTubeApi(deps: ApiDependencies = {}) {
       videos.push({
         videoId,
         title: decodeEntities(item.snippet?.title ?? videoId),
-        publishedDate
+        publishedDate,
+        ...(item.snippet?.channelTitle
+          ? { channelTitle: decodeEntities(item.snippet.channelTitle) }
+          : {})
       });
     }
 
     debug(`era search: ${videos.length} results for "${request.query ?? ""}"`);
 
-    return { videos, quotaUnits: QUOTA_SEARCH };
+    return {
+      videos,
+      ...(body.nextPageToken ? { nextPageToken: body.nextPageToken } : {}),
+      quotaUnits: QUOTA_SEARCH
+    };
   }
 
   return { verifyKey, searchEra };
+}
+
+function adjacentDayBoundary(
+  date: CalendarDate,
+  dayOffset: number,
+  millisecondOffset = 0
+): string {
+  const parsed = parseCalendarDate(date);
+  if (!parsed) return `${date}T00:00:00Z`;
+
+  return new Date(
+    Date.UTC(parsed.year, parsed.month - 1, parsed.day + dayOffset) +
+      millisecondOffset
+  ).toISOString();
 }
 
 /** API titles arrive with HTML entities in them. */
@@ -264,6 +297,7 @@ export function searchCacheKey(request: EraSearchRequest): string {
     request.before,
     request.order,
     request.maxResults ?? 25,
+    request.pageToken ?? "",
     request.regionCode ?? "",
     request.relevanceLanguage ?? ""
   ]);

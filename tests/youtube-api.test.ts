@@ -47,9 +47,10 @@ describe("searchEra", () => {
     const url = new URL(urls[0]!);
     expect(url.origin).toBe("https://www.googleapis.com");
     expect(url.pathname).toBe("/youtube/v3/search");
-    expect(url.searchParams.get("publishedAfter")).toBe("2011-06-01T00:00:00Z");
-    // End of day, so a video published on the cutoff date is included.
-    expect(url.searchParams.get("publishedBefore")).toBe("2012-08-12T23:59:59Z");
+    expect(url.searchParams.get("publishedAfter")).toBe("2011-05-31T23:59:59.999Z");
+    // The API boundaries are strict, so the next midnight includes the entire
+    // cutoff day, including a video at 23:59:59.999.
+    expect(url.searchParams.get("publishedBefore")).toBe("2012-08-13T00:00:00.000Z");
     expect(url.searchParams.get("order")).toBe("viewCount");
     expect(url.searchParams.get("type")).toBe("video");
     expect(url.searchParams.get("key")).toBe(KEY);
@@ -93,6 +94,28 @@ describe("searchEra", () => {
     const params = new URL(urls[0]!).searchParams;
     expect(params.get("q")).toBe("ゲーム実況");
     expect(params.get("channelId")).toBe("UCabcdefghijklmnopqrstuv");
+  });
+
+  it("passes a continuation token and returns the next one", async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string) => {
+      urls.push(String(url));
+      return jsonResponse({ items: [], nextPageToken: "page-3" });
+    });
+
+    const api = createYouTubeApi({ fetchImpl: fetchImpl as never });
+    const result = await api.searchEra({
+      apiKey: KEY,
+      after: null,
+      before: "2012-08-12",
+      order: "viewCount",
+      pageToken: "page-2",
+      maxResults: 50
+    });
+
+    expect(new URL(urls[0]!).searchParams.get("pageToken")).toBe("page-2");
+    expect(new URL(urls[0]!).searchParams.get("maxResults")).toBe("50");
+    expect(result.nextPageToken).toBe("page-3");
   });
 
   it("never sends the user's cookies with the key", async () => {
@@ -142,6 +165,32 @@ describe("searchEra", () => {
       }
     ]);
     expect(result.quotaUnits).toBe(QUOTA_SEARCH);
+  });
+
+  it("keeps the channel title without fabricating view counts", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        items: [{
+          id: { videoId: "AAAAAAAAAAA" },
+          snippet: {
+            title: "A video",
+            publishedAt: "2011-09-08T12:34:56Z",
+            channelTitle: "Archive Channel"
+          }
+        }]
+      })
+    );
+
+    const api = createYouTubeApi({ fetchImpl: fetchImpl as never });
+    const result = await api.searchEra({
+      apiKey: KEY,
+      after: null,
+      before: "2012-08-12",
+      order: "viewCount"
+    });
+
+    expect(result.videos[0]).toMatchObject({ channelTitle: "Archive Channel" });
+    expect(result.videos[0]).not.toHaveProperty("viewCount");
   });
 
   it("drops any result outside the window, whatever the API says", async () => {
@@ -302,6 +351,9 @@ describe("searchCacheKey", () => {
       searchCacheKey({ ...base, order: "date" })
     );
     expect(searchCacheKey(base)).toBe(searchCacheKey({ ...base }));
+    expect(searchCacheKey(base)).not.toBe(
+      searchCacheKey({ ...base, pageToken: "next-page" })
+    );
   });
 });
 

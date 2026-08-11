@@ -18,8 +18,8 @@ export const MESSAGE_VERIFY_API_KEY = "VERIFY_API_KEY" as const;
 export const MESSAGE_API_KEY_VERIFIED = "API_KEY_VERIFIED" as const;
 export const MESSAGE_RESOLVE_ERROR = "RESOLVE_ERROR" as const;
 
-/** Cap on discoveries requested at once, bounding the worker's fan-out. */
-export const MAX_DISCOVERY_LIMIT = 40;
+/** Cap on historical feed cards requested at once. */
+export const MAX_DISCOVERY_LIMIT = 200;
 
 /** Upper bound on ids accepted in one request, to bound worker fan-out. */
 export const MAX_VIDEO_IDS_PER_REQUEST = 200;
@@ -71,10 +71,13 @@ export interface ApiKeyVerifiedResponse {
 
 export interface EraDiscoveredResponse {
   type: typeof MESSAGE_ERA_DISCOVERED;
+  source: "api" | "related" | "none";
+  exhausted: boolean;
   videos: Array<{
     videoId: VideoId;
     title: string | null;
     publishedDate: CalendarDate;
+    channelTitle?: string;
   }>;
 }
 
@@ -124,7 +127,14 @@ export function isEraDiscoveredResponse(
   if (typeof value !== "object" || value === null) return false;
 
   const candidate = value as Partial<EraDiscoveredResponse>;
-  return candidate.type === MESSAGE_ERA_DISCOVERED && Array.isArray(candidate.videos);
+  return (
+    candidate.type === MESSAGE_ERA_DISCOVERED &&
+    Array.isArray(candidate.videos) &&
+    (candidate.source === "api" ||
+      candidate.source === "related" ||
+      candidate.source === "none") &&
+    typeof candidate.exhausted === "boolean"
+  );
 }
 
 export function isResolveVideoDatesRequest(

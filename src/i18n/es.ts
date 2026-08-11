@@ -41,6 +41,7 @@ export const es: Catalog = {
   "popup.discoverHint":
     "Filtrar sólo puede devolver un subconjunto de lo que YouTube ya te recomienda, y por eso reaparecen siempre los mismos vídeos conocidos. Esto recorre el grafo de vídeos relacionados de YouTube partiendo de los que están en tu periodo, sin cookies, así que las sugerencias no están personalizadas.",
   "discover.title": "Más de esta época",
+  "discover.subtitleApi": "Resultados del intervalo elegido proporcionados por la API de datos de YouTube.",
   "discover.subtitle":
     "Encontrados siguiendo los vídeos relacionados de YouTube a partir de los que ya están en tu periodo.",
   "discover.searching": "Buscando más lejos vídeos de esta época…",

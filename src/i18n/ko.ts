@@ -41,6 +41,7 @@ export const ko: Catalog = {
   "popup.discoverHint":
     "필터링만으로는 YouTube가 이미 추천하는 것의 일부만 남기 때문에, 늘 보던 동영상만 반복해서 나옵니다. 이 기능은 기간 안의 동영상에서 출발해 YouTube의 관련 동영상을 따라 바깥으로 탐색합니다. 쿠키 없이 가져오므로 결과가 개인화되지 않습니다.",
   "discover.title": "이 시대의 다른 동영상",
+  "discover.subtitleApi": "YouTube Data API가 선택한 기간으로 검색한 결과입니다.",
   "discover.subtitle": "기간 안의 동영상에서 출발해 YouTube의 관련 동영상을 따라 찾았습니다.",
   "discover.searching": "더 멀리서 이 시대의 동영상을 찾는 중…",
   "discover.none":

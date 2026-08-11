@@ -32,9 +32,9 @@ import {
 } from "./adapters.js";
 import { Backfill } from "./backfill.js";
 import {
-  removeDiscovery,
-  renderDiscovery,
-  setDiscoverRefreshHandler
+  removeDiscovery as removeHistoricalFeed,
+  renderDiscovery as renderHistoricalFeed,
+  setDiscoverRefreshHandler as setHistoricalFeedRefreshHandler
 } from "./discover.js";
 import { applyEraFeatures, resetEraFeatures } from "./era.js";
 import { mountBadge, removeBadge, updateBadge } from "./badge.js";
@@ -104,11 +104,15 @@ const backfill = new Backfill();
  */
 let userHasScrolled = false;
 
-/** How many discovered videos to ask for. */
-const DISCOVERY_LIMIT = 24;
-
-let discoveryRunning = false;
-let discoveryDone = false;
+let historicalFeedRunning = false;
+let historicalFeedDone = false;
+let historicalVideos: Array<{
+  videoId: VideoId;
+  title: string | null;
+  publishedDate: CalendarDate;
+  channelTitle?: string;
+}> = [];
+let historicalSource: "api" | "related" | "none" = "none";
 
 /** Surfaces where refilling makes sense; a watch page is not a feed. */
 const FEED_SURFACES = new Set(["home", "search", "subscriptions", "channel", "playlists"]);
@@ -204,7 +208,9 @@ function applySettings(options: { rescan: boolean }): void {
   guardedVideoId = null;
   backfill.reset();
   // A different window means different discoveries are possible.
-  discoveryDone = false;
+  historicalFeedDone = false;
+  historicalVideos = [];
+  historicalSource = "none";
   if (options.rescan) scheduleScan(true);
 }
 
@@ -213,9 +219,11 @@ function teardown(): void {
   resetShelves();
   resetEraFeatures();
   removeEmptyState();
-  removeDiscovery();
-  discoveryDone = false;
-  discoveryRunning = false;
+  removeHistoricalFeed();
+  historicalFeedDone = false;
+  historicalFeedRunning = false;
+  historicalVideos = [];
+  historicalSource = "none";
   clearRootFlags();
   removeBlockOverlay();
   setWatchState("idle");
@@ -259,9 +267,12 @@ function observe(): void {
     scheduleScan(false);
   });
 
-  setDiscoverRefreshHandler(() => {
-    discoveryDone = false;
-    void runDiscovery();
+  setHistoricalFeedRefreshHandler(() => {
+    historicalFeedDone = false;
+    historicalVideos = [];
+    historicalSource = "none";
+    const { visible } = countVisibleCards(settings);
+    void runHistoricalFeed(visible);
   });
 }
 
@@ -320,7 +331,7 @@ function refillFeed(): void {
   const surface = detectPageSurface(window.location);
   if (!FEED_SURFACES.has(surface)) {
     removeEmptyState();
-    removeDiscovery();
+    removeHistoricalFeed();
     return;
   }
 
@@ -328,57 +339,95 @@ function refillFeed(): void {
 
   const { visible, total } = countVisibleCards(settings);
 
+  // A native card can arrive after the API response. Prefer YouTube's own card
+  // and remove the generated duplicate from the historical grid.
+  const deduplicated = historicalVideos.filter(
+    (video) => !resolutions.has(video.videoId)
+  );
+  if (deduplicated.length !== historicalVideos.length) {
+    historicalVideos = deduplicated;
+    renderHistoricalResults();
+  }
+
+  const combinedVisible = visible + historicalVideos.length;
+  const combinedTotal = total + historicalVideos.length;
+
   // Cards still being resolved are not failures yet; waiting avoids asking for
   // more the instant the page loads, before anything has had a chance to pass.
   const stillResolving = requested.size > resolutions.size;
 
-  if (!settings.fillFeed || stillResolving) {
+  if (stillResolving) {
+    renderEmptyState(
+      {
+        status: "loading",
+        visible: combinedVisible,
+        total: combinedTotal,
+        virtualDate: settings.virtualDate
+      },
+      t
+    );
+    return;
+  }
+
+  // This invariant is checked before any exhausted branch. In particular a
+  // page with 46 survivors and a target of 20 can never display the sparse
+  // panel, regardless of what a previous refill attempt did.
+  if (combinedVisible >= backfill.targetVisible) {
+    backfill.update({
+      visible: combinedVisible,
+      total: combinedTotal,
+      allowScroll: false
+    });
+    removeEmptyState();
+    return;
+  }
+
+  // Historical search is the first refill source. It can directly ask for the
+  // chosen era, unlike repeatedly loading today's recommendations.
+  if (settings.discoverEra && !historicalFeedDone) {
+    removeEmptyState();
+    if (!historicalFeedRunning) void runHistoricalFeed(visible);
+    return;
+  }
+
+  if (!settings.fillFeed) {
     // With refilling switched off, a thin page still deserves an explanation —
     // it just does not get more videos requested for it.
-    const status = stillResolving
-      ? "loading"
-      : visible < backfill.targetVisible && total > 0
-        ? "exhausted"
-        : "idle";
+    const status = combinedVisible < backfill.targetVisible ? "exhausted" : "satisfied";
 
-    renderEmptyState({ status, visible, total, virtualDate: settings.virtualDate }, t);
-
-    // Discovery is independent of refilling: one asks YouTube for more of the
-    // same feed, the other looks outside it.
-    if (status === "exhausted") void runDiscovery();
+    renderEmptyState(
+      { status, visible: combinedVisible, total: combinedTotal, virtualDate: settings.virtualDate },
+      t
+    );
     return;
   }
 
   const status = backfill.update({
-    visible,
-    total,
+    visible: combinedVisible,
+    total: combinedTotal,
     allowScroll: !userHasScrolled
   });
 
-  renderEmptyState({ status, visible, total, virtualDate: settings.virtualDate }, t);
+  renderEmptyState(
+    { status, visible: combinedVisible, total: combinedTotal, virtualDate: settings.virtualDate },
+    t
+  );
 
   // Ask again shortly: the next batch arrives asynchronously, and the mutation
   // observer may not fire if YouTube appended nothing.
   if (status === "loading") scheduleScan(false);
 
-  // Once YouTube has nothing more to offer, go looking beyond what it offered.
-  if (status === "exhausted" && visible < backfill.targetVisible) {
-    void runDiscovery();
-  }
 }
 
-// ----------------------------------------------------------------- discovery
+// ---------------------------------------------------------- historical feed
 
 /**
- * Look for era videos outside what YouTube recommended.
- *
- * Only worth doing once the ordinary feed has been exhausted: this costs a
- * page fetch per candidate, and if the recommender was already producing
- * enough in-window videos there is nothing to fix.
+ * Build the missing portion of the feed from an authoritative API period
+ * search, with the related graph as the worker's no-key/failure fallback.
  */
-async function runDiscovery(): Promise<void> {
+async function runHistoricalFeed(nativeVisible: number): Promise<void> {
   if (!settings.discoverEra) return;
-  if (discoveryRunning || discoveryDone) return;
+  if (historicalFeedRunning || historicalFeedDone) return;
 
   // Seeds are the videos already on the page that passed the filter: known to
   // be in the window, and close to what the user is actually looking at.
@@ -387,16 +436,11 @@ async function runDiscovery(): Promise<void> {
     .map(([videoId]) => videoId)
     .slice(0, 12);
 
-  if (seeds.length === 0) {
-    // Nothing in-window to walk out from. The panel already explains the page.
-    return;
-  }
-
-  discoveryRunning = true;
-  renderDiscovery({ status: "searching" }, t);
+  historicalFeedRunning = true;
+  renderHistoricalFeed({ status: "searching" }, t);
 
   try {
-    // What the page is about, so an API search can be asked the era version of
+    // What the page is about, so the API can be asked the era version of
     // the user's actual question rather than a generic one.
     const context = readPageContext(window.location);
 
@@ -405,26 +449,46 @@ async function runDiscovery(): Promise<void> {
       seeds,
       start: settings.rangeStart,
       end: settings.virtualDate,
-      limit: DISCOVERY_LIMIT,
+      limit: Math.max(1, backfill.targetVisible - nativeVisible),
       exclude: [...resolutions.keys()],
       ...context
     });
 
     if (!isEraDiscoveredResponse(response)) throw new Error("unexpected response");
 
-    discoveryDone = true;
-    renderDiscovery(
-      response.videos.length > 0
-        ? { status: "results", videos: response.videos }
-        : { status: "empty" },
-      t
-    );
+    const seen = new Set<VideoId>(resolutions.keys());
+    historicalVideos = response.videos.filter((video) => {
+      if (seen.has(video.videoId)) return false;
+      if (decideCardState(video.publishedDate, settings) !== "visible") return false;
+      seen.add(video.videoId);
+      return true;
+    });
+    historicalSource = response.source;
+    historicalFeedDone = true;
+    renderHistoricalResults();
   } catch (error) {
     debug("discovery failed", error);
-    renderDiscovery({ status: "empty" }, t);
+    historicalVideos = [];
+    historicalSource = "none";
+    historicalFeedDone = true;
+    removeHistoricalFeed();
   } finally {
-    discoveryRunning = false;
+    historicalFeedRunning = false;
+    scheduleScan(true);
   }
+}
+
+function renderHistoricalResults(): void {
+  if (historicalVideos.length === 0 || historicalSource === "none") {
+    removeHistoricalFeed();
+    return;
+  }
+
+  renderHistoricalFeed({
+    status: "results",
+    videos: historicalVideos,
+    source: historicalSource
+  }, t);
 }
 
 /**
@@ -444,8 +508,10 @@ function detectNavigation(): void {
   backfill.reset();
   userHasScrolled = false;
   removeEmptyState();
-  removeDiscovery();
-  discoveryDone = false;
+  removeHistoricalFeed();
+  historicalFeedDone = false;
+  historicalVideos = [];
+  historicalSource = "none";
 
   const videoId = currentWatchVideoId(window.location);
   if (videoId) {

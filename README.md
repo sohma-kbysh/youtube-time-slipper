@@ -173,13 +173,12 @@ flashing on screen before it gets filtered out.
 scaffolding behind, so a shelf whose videos are all hidden is collapsed
 along with them — no orphaned headings, "Show less" buttons or blank
 bands. Because today's recommendations are mostly recent, a distant
-virtual present can still empty a feed; with **Keep loading until the
-feed is full** enabled (the default), the extension then asks YouTube
-for more items, stopping early once the target is met or YouTube stops
-producing new ones. It only moves the viewport while the page is nearly
-empty, and stops doing so once you scroll yourself. If the feed still
-comes up short, a panel explains why and offers a **Load more** button
-rather than leaving a blank screen.
+virtual present can still empty a feed. The extension first builds a
+date-constrained historical feed (described below). If that is still short,
+**Keep loading until the feed is full** asks the native page for more items,
+stopping once the combined total reaches the target or YouTube stops producing
+new ones. A sparse panel appears only after the configured sources have
+finished, rather than while historical results are still loading.
 
 Both limits are yours to set: **Videos to aim for** (default 20, up to
 200) and **Maximum extra loads per page** (default 25, up to 300). Raise
@@ -191,7 +190,7 @@ setting cannot turn a tab into an unbounded crawl.
 This never relaxes the filter — it only changes how much material the
 filter is applied to.
 
-## Finding videos the feed never offered
+## Historical feed
 
 Filtering has a ceiling that no amount of extra loading fixes. YouTube's
 home feed is personalised, so the videos old enough to survive the filter
@@ -199,11 +198,22 @@ are, by construction, the ones you already watch — the page ends up both
 sparse *and* repetitive. Filtering a set can only ever return a subset of
 it.
 
-**Find videos from this era** (on by default) goes outside that set. It
-walks YouTube's own related-video graph: starting from videos already
-inside your window, it asks each one what YouTube considers adjacent to
-it, keeps the answers that also fall inside the window, and repeats — up
-to three steps out. The results appear in a shelf at the top of the feed.
+**Find videos from this era** (on by default) goes outside that set. With a
+valid API key, the YouTube Data API is the primary historical-feed provider:
+it searches the selected date window directly, requests up to 50 results per
+page, follows continuation tokens until the visible target is met (within a
+bounded request budget), and removes duplicates already present in the native
+feed. Home uses a general period search, search pages preserve the user's query,
+and channel pages pass the channel id.
+
+The extension renders the results as a grid integrated into the feed. Each card
+shows its thumbnail, title, publication date and, when supplied in the same API
+response, channel title. It does not invent historical view counts.
+
+Without a key, or when API access fails, the related-video graph remains the
+fallback. Starting from videos already inside the window, it asks what YouTube
+considers adjacent, keeps answers inside the window, and repeats up to three
+steps out.
 
 Two things make this work in your favour:
 
@@ -214,11 +224,9 @@ Two things make this work in your favour:
   Three steps out, confined to a fixed period, is a different corner of
   YouTube.
 
-It runs only once the ordinary feed has been exhausted, since each
-candidate costs one page fetch (cached afterwards), and it is capped per
-page. Related-video ids and titles are taken from the same page fetch
-that resolves the date, so discovery adds no requests for videos already
-seen.
+The graph fallback is capped because each candidate costs one page fetch
+(cached afterwards). Related-video ids and titles are taken from the same page
+fetch that resolves the date, so it adds no requests for videos already seen.
 
 What this is not: it cannot reconstruct what was actually trending in
 2012. Nothing running in your browser can — that data is not served any
@@ -227,8 +235,8 @@ which is a different and more modest claim.
 
 ## Optional: your own YouTube Data API key
 
-The related-video walk infers an era from what YouTube considers similar.
-With an API key it can stop inferring: `search.list` takes
+The related-video fallback infers an era from what YouTube considers similar.
+With an API key the historical feed stops inferring: `search.list` takes
 `publishedAfter` and `publishedBefore` directly, so the extension can ask
 for "videos published between these two dates, ranked by views" — a real
 sample of the period, entirely independent of your watch history.
@@ -260,10 +268,10 @@ What happens to the key:
 - Bad key, API not enabled, and quota exhausted are reported as three
   different messages, because they have three different fixes.
 
-Quota is treated as the scarce resource it is: identical searches are
-cached for twelve hours, the popup shows roughly how many units the day
-has cost, and if the quota runs out the extension falls back to the free
-related-video walk rather than failing.
+Quota is treated as the scarce resource it is: each search page is cached for
+twelve hours (including its continuation token), the popup shows roughly how
+many units the day has cost, and if the quota runs out the extension falls back
+to the free related-video walk rather than failing.
 
 The search is also given the page's context, so it asks the era version
 of the question you are actually asking: your search terms on a results
@@ -311,13 +319,11 @@ navigation came from.
   date comes back — that is the cost of never flashing a future video.
   Subsequent visits are served from the IndexedDB cache and need no
   network at all.
-- The further back your virtual present is, the thinner every feed gets.
-  The extension filters what today's recommender offers; it cannot make
-  YouTube recommend 2012 videos. Refilling exhausts what YouTube is
-  willing to hand over, which helps for cutoffs a few years back and much
-  less for a decade. Search and channel pages are the reliable way to
-  reach genuinely old material — a channel's back catalogue is all still
-  there, and the filter simply stops it at your date.
+- Without a Data API key, the further back your virtual present is, the thinner
+  feeds can get. The related-video graph is a bounded fallback, not a historical
+  recommendation archive. With a key, period search fills the historical grid
+  directly, but its ranking is today's API ranking rather than the homepage a
+  user actually saw in that year.
 - Publication-date resolution depends on YouTube continuing to expose
   machine-readable date metadata on the watch page in its current form;
   if YouTube changes that markup, resolution can start failing until
@@ -329,8 +335,9 @@ navigation came from.
 - The extension is entirely client-side. There is no server backend, no
   analytics, no telemetry, no account or sign-in, and no remotely
   hosted or dynamically loaded code.
-- The only network requests the extension itself makes are to
-  `youtube.com`, to read a given video's publication date.
+- The extension requests `youtube.com` to resolve dates and related videos. If
+  you configure an API key, it also requests `googleapis.com` for historical
+  searches and key verification.
 - Your settings (including `D_virtual`) are stored in
   `chrome.storage.local`, and the resolved-date cache is stored in
   IndexedDB. Both stay on your machine.
@@ -378,8 +385,6 @@ Not implemented in v1; under consideration for v2:
 - A running virtual clock, where virtual time advances on its own,
   faster than real time, instead of staying pinned to a fixed
   `D_virtual`.
-- A historical discovery mode, for surfacing videos from a chosen past
-  period rather than only filtering the current recommender's output.
 
 ## License
 

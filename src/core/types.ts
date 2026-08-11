@@ -73,10 +73,7 @@ export interface Settings {
   /** Upper bound on extra page loads per feed. */
   fillMaxRounds: number;
 
-  /**
-   * Look for era videos beyond what YouTube recommends, by walking its
-   * related-video graph outward from videos already inside the window.
-   */
+  /** Build a historical feed, using the API first and related videos as fallback. */
   discoverEra: boolean;
 
   /**

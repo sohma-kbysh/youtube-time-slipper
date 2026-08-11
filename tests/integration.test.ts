@@ -41,7 +41,24 @@ let storage: Record<string, unknown>;
 let storageListeners: StorageListener[];
 let sendMessage: ReturnType<typeof vi.fn>;
 
-function installChromeStub(initial: Partial<Settings>): void {
+const DEFAULT_HISTORICAL_VIDEOS = [
+  {
+    videoId: "DDDDDDDDDDD",
+    title: "A video from the era",
+    publishedDate: "2009-07-07"
+  },
+  {
+    videoId: "EEEEEEEEEEE",
+    title: "Another from the era",
+    publishedDate: "2011-02-02"
+  }
+];
+
+function installChromeStub(
+  initial: Partial<Settings>,
+  historicalVideos: typeof DEFAULT_HISTORICAL_VIDEOS | Promise<typeof DEFAULT_HISTORICAL_VIDEOS> =
+    DEFAULT_HISTORICAL_VIDEOS
+): void {
   storage = { settings: initial };
   storageListeners = [];
 
@@ -53,20 +70,12 @@ function installChromeStub(initial: Partial<Settings>): void {
     }
 
     if (request.type === MESSAGE_DISCOVER_ERA) {
+      const resolvedVideos = await historicalVideos;
       return {
         type: MESSAGE_ERA_DISCOVERED,
-        videos: [
-          {
-            videoId: "DDDDDDDDDDD",
-            title: "A video from the era",
-            publishedDate: "2009-07-07"
-          },
-          {
-            videoId: "EEEEEEEEEEE",
-            title: "Another from the era",
-            publishedDate: "2011-02-02"
-          }
-        ]
+        source: resolvedVideos.length > 0 ? "api" : "none",
+        exhausted: resolvedVideos.length < request.limit,
+        videos: resolvedVideos.slice(0, request.limit)
       };
     }
 
@@ -145,9 +154,11 @@ let stopContentScript: (() => void) | null = null;
 
 async function bootContentScript(
   settings: Partial<Settings>,
-  html: string = feed()
+  html: string = feed(),
+  historicalVideos: typeof DEFAULT_HISTORICAL_VIDEOS | Promise<typeof DEFAULT_HISTORICAL_VIDEOS> =
+    DEFAULT_HISTORICAL_VIDEOS
 ): Promise<void> {
-  installChromeStub(settings);
+  installChromeStub(settings, historicalVideos);
   document.body.innerHTML = html;
 
   vi.resetModules();
@@ -205,9 +216,12 @@ describe("content script, end to end", () => {
   it("asks the worker only once per video", async () => {
     await bootContentScript({ enabled: true, virtualDate: "2012-08-12" });
 
-    const asked = sendMessage.mock.calls.flatMap(
-      (call) => (call[0] as ResolveVideoDatesRequest).videoIds
-    );
+    const asked = sendMessage.mock.calls
+      .map((call) => call[0] as ExtensionRequest)
+      .filter((request): request is ResolveVideoDatesRequest =>
+        request.type === MESSAGE_RESOLVE_VIDEO_DATES
+      )
+      .flatMap((request) => request.videoIds);
 
     expect(new Set(asked).size).toBe(asked.length);
     expect(new Set(asked)).toEqual(new Set([OLD_VIDEO, NEW_VIDEO, UNDATED_VIDEO]));
@@ -226,14 +240,18 @@ describe("content script, end to end", () => {
     await bootContentScript({ enabled: true, virtualDate: "2012-08-12" });
     expect(stateOf("new")).toBe("future");
 
-    const callsBefore = sendMessage.mock.calls.length;
+    const resolutionCallsBefore = sendMessage.mock.calls.filter(
+      (call) => (call[0] as ExtensionRequest).type === MESSAGE_RESOLVE_VIDEO_DATES
+    ).length;
 
     await updateSettings({ virtualDate: "2020-01-01" });
 
     expect(stateOf("new")).toBe("visible");
     expect(stateOf("old")).toBe("visible");
     // Dates are immutable, so moving the cutoff must not re-resolve anything.
-    expect(sendMessage.mock.calls.length).toBe(callsBefore);
+    expect(sendMessage.mock.calls.filter(
+      (call) => (call[0] as ExtensionRequest).type === MESSAGE_RESOLVE_VIDEO_DATES
+    )).toHaveLength(resolutionCallsBefore);
   });
 
   it("reveals undated videos when the policy is relaxed", async () => {
@@ -323,6 +341,15 @@ describe("content script, end to end", () => {
  * explanation instead of a blank screen, and more material requested.
  */
 describe("a feed that filtering empties", () => {
+  function datedFeed(ids: string[]): string {
+    return `<div id="contents">${ids
+      .map(
+        (id) =>
+          `<ytd-rich-item-renderer><a href="/watch?v=${id}">${id}</a></ytd-rich-item-renderer>`
+      )
+      .join("")}</div>`;
+  }
+
   function feedWithShelf(): string {
     return `
       <div id="contents">
@@ -379,6 +406,78 @@ describe("a feed that filtering empties", () => {
     expect(panel).not.toBeNull();
     expect(panel?.textContent).toContain("Not much of this page exists yet");
     expect(panel?.querySelector("button")?.textContent).toBe("Load more");
+  });
+
+  it("never shows the sparse panel when 46 visible videos exceed a target of 20", async () => {
+    const ids = Array.from({ length: 46 }, (_, index) =>
+      `V${String(index).padStart(10, "0")}`
+    );
+    for (const id of ids) DATES[id] = "2011-01-01";
+
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12", fillTargetVisible: 20 },
+      datedFeed(ids)
+    );
+
+    expect(document.querySelectorAll('[data-time-slipper-state="visible"]')).toHaveLength(46);
+    expect(document.querySelector(".time-slipper-empty")).toBeNull();
+    expect(sendMessage.mock.calls.some(
+      (call) => (call[0] as ExtensionRequest).type === MESSAGE_DISCOVER_ERA
+    )).toBe(false);
+  });
+
+  it("combines 5 native survivors with 15 API results to satisfy a target of 20", async () => {
+    const nativeIds = Array.from({ length: 5 }, (_, index) =>
+      `N${String(index).padStart(10, "0")}`
+    );
+    for (const id of nativeIds) DATES[id] = "2011-01-01";
+
+    const apiVideos = Array.from({ length: 15 }, (_, index) => ({
+      videoId: `H${String(index).padStart(10, "0")}`,
+      title: `historical ${index}`,
+      publishedDate: "2011-06-01"
+    }));
+
+    await bootContentScript(
+      {
+        enabled: true,
+        virtualDate: "2012-08-12",
+        fillFeed: false,
+        fillTargetVisible: 20
+      },
+      datedFeed(nativeIds),
+      apiVideos
+    );
+
+    expect(document.querySelectorAll(".time-slipper-discover__card")).toHaveLength(15);
+    expect(document.querySelector(".time-slipper-empty")).toBeNull();
+    expect(document.querySelector("[data-time-slipper-historical-feed]")?.textContent)
+      .toContain("Time Slipper historical results");
+  });
+
+  it("shows the sparse panel only after the historical source is exhausted", async () => {
+    let finishSearch!: (videos: typeof DEFAULT_HISTORICAL_VIDEOS) => void;
+    const pendingSearch = new Promise<typeof DEFAULT_HISTORICAL_VIDEOS>((resolve) => {
+      finishSearch = resolve;
+    });
+
+    await bootContentScript(
+      {
+        enabled: true,
+        virtualDate: "2012-08-12",
+        fillFeed: false,
+        fillTargetVisible: 20
+      },
+      feedWithShelf(),
+      pendingSearch
+    );
+
+    expect(document.querySelector(".time-slipper-empty")).toBeNull();
+
+    finishSearch([]);
+    await settle();
+
+    expect(document.querySelector(".time-slipper-empty")).not.toBeNull();
   });
 
   it("asks YouTube for more videos", async () => {

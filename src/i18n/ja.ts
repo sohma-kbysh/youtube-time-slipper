@@ -39,11 +39,12 @@ export const ja: Catalog = {
     "大きくするほど空きが埋まりますが、YouTube へのリクエストも増えます。",
   "popup.discover": "この時代の動画を探す",
   "popup.discoverHint":
-    "フィルタだけでは、YouTube が今のあなたに勧める動画の一部しか出せません（いつも見ている動画ばかり出るのはこのためです）。この機能は、期間内の動画を起点に YouTube の関連動画をたどって外側へ探します。Cookie なしで取得するため、結果はパーソナライズされません。",
-  "discover.title": "この時代の他の動画",
+    "ページが少ないとき、YouTube Data API の期間検索で補充します。API キーがない場合は、期間内の動画から非パーソナライズの関連動画を探します。",
+  "discover.title": "Time Slipper の履歴検索結果",
+  "discover.subtitleApi": "YouTube Data API で指定期間を直接検索した結果です。",
   "discover.subtitle":
-    "期間内の動画を起点に、YouTube の関連動画をたどって見つけました。",
-  "discover.searching": "この時代の動画をさらに探しています…",
+    "タイムライン内の動画から関連動画をたどったフォールバック結果です。",
+  "discover.searching": "このページの履歴フィードを作成しています…",
   "discover.none":
     "この時代の新しい動画はまだ見つかりませんでした。期間を広げるか、その時代の動画を一度開いてから戻ってみてください。",
   "discover.refresh": "さらに探す",

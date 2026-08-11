@@ -1,11 +1,10 @@
 /**
- * The discovery shelf.
+ * The generated historical feed.
  *
- * Cards built by the extension rather than by YouTube, because these videos
- * are not in the page — they came out of the related-video walk in the worker.
- * They are deliberately plain: a thumbnail, a title and the publication date,
- * with no view counts or channel avatars, because fetching those would cost a
- * request each and the date is the only number that matters here.
+ * Cards are built by the extension because these videos did not come from the
+ * native page. They can come from date-constrained Data API search or, when
+ * that is unavailable, the related-video fallback. No view count is shown:
+ * the API's current count would not be a historical count.
  *
  * The shelf never contains a video from outside the window; the walk filters
  * before returning, and the card links to the ordinary watch page, where the
@@ -22,12 +21,13 @@ export interface DiscoveredCard {
   videoId: VideoId;
   title: string | null;
   publishedDate: CalendarDate;
+  channelTitle?: string;
 }
 
 export type DiscoveryState =
   | { status: "hidden" }
   | { status: "searching" }
-  | { status: "results"; videos: DiscoveredCard[] }
+  | { status: "results"; videos: DiscoveredCard[]; source: "api" | "related" }
   | { status: "empty" };
 
 let shelf: HTMLElement | null = null;
@@ -70,7 +70,9 @@ export function renderDiscovery(state: DiscoveryState, t: Translator): void {
         ? t("discover.searching")
         : state.status === "empty"
           ? t("discover.none")
-          : t("discover.subtitle");
+          : state.status === "results" && state.source === "api"
+            ? t("discover.subtitleApi")
+            : t("discover.subtitle");
   }
 
   if (!grid) return;
@@ -86,6 +88,7 @@ export function renderDiscovery(state: DiscoveryState, t: Translator): void {
 function createShelf(t: Translator): HTMLElement {
   const element = document.createElement("section");
   element.className = SHELF_CLASS;
+  element.setAttribute("data-time-slipper-historical-feed", "");
 
   const header = document.createElement("div");
   header.className = `${SHELF_CLASS}__header`;
@@ -130,7 +133,9 @@ function createCard(video: DiscoveredCard, t: Translator): HTMLElement {
 
   const date = document.createElement("span");
   date.className = `${SHELF_CLASS}__card-date`;
-  date.textContent = t.date(video.publishedDate);
+  date.textContent = video.channelTitle
+    ? `${video.channelTitle} · ${t.date(video.publishedDate)}`
+    : t.date(video.publishedDate);
 
   link.append(thumbnail, title, date);
   return link;

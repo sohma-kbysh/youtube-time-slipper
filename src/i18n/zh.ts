@@ -40,6 +40,7 @@ export const zh: Catalog = {
   "popup.discoverHint":
     "仅靠过滤，只能得到 YouTube 已经推荐给你的那一部分，所以反复出现的总是你常看的视频。此功能改为从时间范围内的视频出发，沿着 YouTube 的相关视频向外查找，并且不带 Cookie，因此结果不会被个性化。",
   "discover.title": "这个年代的更多视频",
+  "discover.subtitleApi": "由 YouTube Data API 按所选日期范围提供的结果。",
   "discover.subtitle": "从时间范围内的视频出发，沿着 YouTube 的相关视频找到。",
   "discover.searching": "正在更远处寻找这个年代的视频…",
   "discover.none":

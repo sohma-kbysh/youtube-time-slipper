@@ -41,6 +41,7 @@ export const de: Catalog = {
   "popup.discoverHint":
     "Filtern kann immer nur eine Teilmenge dessen liefern, was YouTube dir ohnehin empfiehlt — deshalb erscheinen immer wieder dieselben vertrauten Videos. Dies folgt stattdessen YouTubes Graph ähnlicher Videos nach außen, ausgehend von Videos in deinem Zeitraum und ohne Cookies, sodass die Vorschläge nicht personalisiert sind.",
   "discover.title": "Mehr aus dieser Zeit",
+  "discover.subtitleApi": "Ergebnisse für den gewählten Zeitraum aus der YouTube Data API.",
   "discover.subtitle":
     "Gefunden, indem YouTubes ähnlichen Videos ausgehend von deinem Zeitraum gefolgt wurde.",
   "discover.searching": "Suche weiter draußen nach Videos aus dieser Zeit…",

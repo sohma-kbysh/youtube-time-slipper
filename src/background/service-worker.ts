@@ -32,6 +32,7 @@ import { createYouTubeApi, YouTubeApiError } from "./youtube-api.js";
 import type { PublicationResolution, VideoId } from "../core/types.js";
 import { IndexedDbCache, MemoryCache, type PublicationCache } from "./cache.js";
 import { createDiscovery } from "./discovery.js";
+import { createHistoricalFeedProvider } from "./historical-feed-provider.js";
 import { FetchQueue } from "./fetch-queue.js";
 import { createResolver } from "./resolver.js";
 
@@ -56,55 +57,33 @@ const discovery = createDiscovery({
 });
 
 const eraSearch = createEraSearch();
+const historicalFeed = createHistoricalFeedProvider({ eraSearch, discovery });
 const api = createYouTubeApi();
 
 /**
- * Answer a discovery request.
+ * Answer a historical-feed request.
  *
  * The API is tried first when the user has supplied a key: it can ask for a
  * date range directly, so the result is a real sample of the period rather
  * than an inference from today's recommendations. Everything else — no key, no
  * permission, quota gone, a network failure — falls through to the free
- * related-video walk, so discovery always returns *something*.
+ * related-video walk when an in-window seed exists.
  */
 async function discoverEra(message: DiscoverEraRequest) {
   const settings = await loadSettings();
   const limit = Math.min(message.limit, MAX_DISCOVERY_LIMIT);
 
-  if (settings.apiKey) {
-    const outcome = await eraSearch.search({
-      apiKey: settings.apiKey,
-      order: settings.apiOrder,
-      start: message.start,
-      end: message.end,
-      limit,
-      ...(message.query ? { query: message.query } : {}),
-      ...(message.channelId ? { channelId: message.channelId } : {}),
-      exclude: [...(message.exclude ?? []), ...message.seeds]
-    });
-
-    if (outcome.videos.length > 0) {
-      return outcome.videos.map((video) => ({
-        videoId: video.videoId,
-        title: video.title,
-        publishedDate: video.publishedDate
-      }));
-    }
-  }
-
-  const walked = await discovery.discover({
-    seeds: message.seeds.slice(0, MAX_VIDEO_IDS_PER_REQUEST),
+  return historicalFeed.provide({
+    apiKey: settings.apiKey,
+    order: settings.apiOrder,
     start: message.start,
     end: message.end,
-    limit,
-    exclude: message.exclude ?? []
+    needed: limit,
+    seeds: message.seeds.slice(0, MAX_VIDEO_IDS_PER_REQUEST),
+    exclude: message.exclude ?? [],
+    ...(message.query ? { query: message.query } : {}),
+    ...(message.channelId ? { channelId: message.channelId } : {})
   });
-
-  return walked.map(({ videoId, title, publishedDate }) => ({
-    videoId,
-    title,
-    publishedDate
-  }));
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -177,10 +156,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   discoverEra(message)
-    .then((videos) => {
+    .then((result) => {
       sendResponse({
         type: MESSAGE_ERA_DISCOVERED,
-        videos
+        ...result
       } satisfies ExtensionResponse);
     })
     .catch(failed);

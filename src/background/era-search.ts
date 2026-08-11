@@ -43,12 +43,14 @@ export interface EraSearchInput {
   exclude?: VideoId[];
   regionCode?: string;
   relevanceLanguage?: string;
+  pageToken?: string;
 }
 
 export interface EraSearchOutcome {
   videos: EraSearchResult["videos"];
   /** How the answer was obtained, for the debug log and tests. */
   source: "api" | "cache" | "unavailable";
+  nextPageToken?: string;
   errorKind?: string;
 }
 
@@ -83,23 +85,32 @@ export function createEraSearch(deps: EraSearchDependencies = {}) {
       ...(input.regionCode ? { regionCode: input.regionCode } : {}),
       ...(input.relevanceLanguage
         ? { relevanceLanguage: input.relevanceLanguage }
-        : {})
+        : {}),
+      ...(input.pageToken ? { pageToken: input.pageToken } : {})
     };
 
     const cacheKey = searchCacheKey(request);
 
-    const cached = await readCachedSearch<EraSearchResult["videos"]>(cacheKey);
+    const cached = await readCachedSearch<EraSearchResult>(cacheKey);
     if (cached) {
-      debug(`era search served from cache (${cached.length} videos)`);
-      return { videos: exclude(cached, input.exclude), source: "cache" };
+      debug(`era search served from cache (${cached.videos.length} videos)`);
+      return {
+        videos: exclude(cached.videos, input.exclude),
+        source: "cache",
+        ...(cached.nextPageToken ? { nextPageToken: cached.nextPageToken } : {})
+      };
     }
 
     try {
       const result = await api.searchEra(request);
       await recordUsage(result.quotaUnits);
-      await writeCachedSearch(cacheKey, result.videos);
+      await writeCachedSearch(cacheKey, result);
 
-      return { videos: exclude(result.videos, input.exclude), source: "api" };
+      return {
+        videos: exclude(result.videos, input.exclude),
+        source: "api",
+        ...(result.nextPageToken ? { nextPageToken: result.nextPageToken } : {})
+      };
     } catch (error) {
       const kind = error instanceof YouTubeApiError ? error.kind : "unexpected";
 
