@@ -152,6 +152,30 @@ input:focus-visible {
   padding-top: 8px;
 }
 
+.field__label--tight {
+  margin-top: 10px;
+}
+
+input[type="password"] {
+  flex: 1;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.status--error {
+  color: var(--danger);
+}
+
+a {
+  color: var(--accent);
+}
+
 .checks--single {
   grid-template-columns: 1fr;
 }

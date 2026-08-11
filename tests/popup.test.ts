@@ -12,10 +12,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { todayAsCalendarDate } from "../src/core/date";
+import { MESSAGE_API_KEY_VERIFIED } from "../src/core/messages";
 import type { Settings } from "../src/core/types";
 
 let stored: Record<string, unknown>;
 let setSpy: ReturnType<typeof vi.fn>;
+let sendMessage: ReturnType<typeof vi.fn>;
+let permissionRequest: ReturnType<typeof vi.fn>;
 
 function loadMarkup(): void {
   // Resolved from the project root: under the jsdom environment
@@ -30,20 +34,28 @@ function loadMarkup(): void {
 }
 
 function installChromeStub(settings: Partial<Settings>): void {
-  stored = { settings };
+  stored = { settings, ...(stored?.["apiUsage"] ? { apiUsage: stored["apiUsage"] } : {}) };
 
   setSpy = vi.fn(async (items: Record<string, unknown>) => {
     Object.assign(stored, items);
   });
 
+  // Verification goes through the worker, and the API host permission is
+  // optional, so both are stubbed here.
+  sendMessage = vi.fn(async () => ({ type: MESSAGE_API_KEY_VERIFIED, ok: true }));
+  permissionRequest = vi.fn(async () => true);
+
   (globalThis as Record<string, unknown>)["chrome"] = {
     storage: {
       local: {
         get: async (key: string) => ({ [key]: stored[key] }),
-        set: setSpy
+        set: setSpy,
+        remove: async () => {}
       },
       onChanged: { addListener: () => {}, removeListener: () => {} }
-    }
+    },
+    runtime: { sendMessage, id: "test-extension-id" },
+    permissions: { request: permissionRequest, contains: async () => true }
   };
 }
 
@@ -280,6 +292,93 @@ describe("popup", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(savedSettings().fillMaxRounds).toBe(300);
+  });
+
+  it("stores an API key only after it has been verified", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    input("#api-key").value = "AIzaWorkingKey";
+    document.querySelector<HTMLButtonElement>("#api-verify")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(permissionRequest).toHaveBeenCalledWith({
+      origins: ["https://www.googleapis.com/*"]
+    });
+    expect(savedSettings().apiKey).toBe("AIzaWorkingKey");
+    expect(document.querySelector("#api-status")?.textContent).toContain("Key works");
+  });
+
+  it("does not store a key the API rejected", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    sendMessage.mockResolvedValueOnce({
+      type: MESSAGE_API_KEY_VERIFIED,
+      ok: false,
+      errorKind: "invalid-key",
+      detail: "API key not valid"
+    });
+
+    input("#api-key").value = "typo";
+    document.querySelector<HTMLButtonElement>("#api-verify")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // A stored-but-broken key would fail silently on every search.
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(document.querySelector("#api-status")?.textContent).toContain("rejected");
+  });
+
+  it("explains a disabled API differently from a bad key", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    sendMessage.mockResolvedValueOnce({
+      type: MESSAGE_API_KEY_VERIFIED,
+      ok: false,
+      errorKind: "not-enabled"
+    });
+
+    input("#api-key").value = "AIzaKey";
+    document.querySelector<HTMLButtonElement>("#api-verify")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(document.querySelector("#api-status")?.textContent).toContain("not enabled");
+  });
+
+  it("does not store a key when the host permission is declined", async () => {
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+
+    permissionRequest.mockResolvedValueOnce(false);
+
+    input("#api-key").value = "AIzaKey";
+    document.querySelector<HTMLButtonElement>("#api-verify")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(document.querySelector("#api-status")?.textContent).toContain("declined");
+  });
+
+  it("removes a stored key without asking the API", async () => {
+    await openPopup({
+      enabled: true,
+      virtualDate: "2012-08-12",
+      apiKey: "AIzaOldKey"
+    });
+
+    expect(input("#api-key").value).toBe("AIzaOldKey");
+
+    document.querySelector<HTMLButtonElement>("#api-remove")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(savedSettings().apiKey).toBe("");
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("shows today's quota use", async () => {
+    stored["apiUsage"] = { day: todayAsCalendarDate(), units: 300 };
+    await openPopup({ enabled: true, virtualDate: "2012-08-12" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(document.querySelector("#api-usage")?.textContent).toContain("300");
   });
 
   it("reports a storage failure with its real message", async () => {

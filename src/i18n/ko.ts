@@ -46,6 +46,32 @@ export const ko: Catalog = {
   "discover.none":
     "아직 이 시대의 새로운 동영상을 찾지 못했습니다. 기간을 넓히거나, 그 시기의 동영상을 한 번 연 뒤 다시 시도해 보세요.",
   "discover.refresh": "더 찾기",
+  "popup.apiSection": "YouTube Data API (선택)",
+  "popup.apiIntro":
+    "직접 발급한 API 키를 넣으면, 지정한 기간에 게시된 동영상을 조회수 순으로 YouTube에 바로 요청할 수 있습니다. 오늘의 추천에서 추측하는 것이 아니라 그 시대의 실제 표본입니다.",
+  "popup.apiKey": "내 API 키",
+  "popup.apiGetKey": "키 발급 방법",
+  "popup.apiVerify": "확인 후 저장",
+  "popup.apiRemove": "삭제",
+  "popup.apiPrivacy":
+    "키는 이 브라우저에만 저장되며 googleapis.com 외에는 어디로도 전송되지 않습니다. 확장 프로그램은 자체 키를 포함하지 않으므로 할당량은 온전히 사용자의 것입니다.",
+  "popup.apiOrder": "정렬 기준",
+  "popup.apiOrderViewCount": "조회수",
+  "popup.apiOrderRelevance": "관련성",
+  "popup.apiOrderDate": "기간 내 최신순",
+  "popup.apiOk": "키가 정상입니다 — 시대 검색을 사용할 수 있습니다.",
+  "popup.apiChecking": "키를 확인하는 중…",
+  "popup.apiUsage": "오늘 약 {units} 할당량 사용 (상한 약 {limit}).",
+  "popup.apiUsageNote":
+    "이 수치는 로컬 집계이며, Google의 할당량은 미국 태평양 시간 자정에 초기화됩니다. 검색 1회에 100 할당량이 들고, 같은 검색은 캐시됩니다.",
+  "popup.apiErrorInvalidKey": "키가 거부되었습니다. 전체가 정확히 복사되었는지 확인하세요.",
+  "popup.apiErrorNotEnabled":
+    "키는 유효하지만 해당 프로젝트에서 YouTube Data API v3가 활성화되어 있지 않습니다.",
+  "popup.apiErrorQuota": "이 키는 오늘 할당량을 모두 사용했습니다.",
+  "popup.apiErrorPermission":
+    "googleapis.com 접근 권한이 거부되어 키를 사용할 수 없습니다.",
+  "popup.apiErrorNetwork": "googleapis.com에 연결할 수 없습니다.",
+  "popup.apiErrorUnexpected": "키를 확인하지 못했습니다: {detail}",
   "popup.language": "언어",
   "popup.languageAuto": "자동",
   "popup.statusOn": "{date} 이후에 게시된 동영상은 숨겨집니다.",

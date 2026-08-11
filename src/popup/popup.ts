@@ -22,13 +22,39 @@ import {
   type MessageKey,
   type Translator
 } from "../core/i18n.js";
+import {
+  MESSAGE_VERIFY_API_KEY,
+  isApiKeyVerifiedResponse
+} from "../core/messages.js";
 import type { ConfigurableSurface, Settings } from "../core/types.js";
 import { ERA_FEATURES } from "../content/era.js";
+import { DAILY_QUOTA, type EraSearchOrder } from "../background/youtube-api.js";
+import { readUsage } from "../storage/api-usage.js";
 import {
+  API_ORDERS,
   CONFIGURABLE_SURFACES,
   loadSettings,
   patchSettings
 } from "../storage/settings.js";
+
+/** The optional host permission the API needs. */
+const API_ORIGIN_PATTERN = "https://www.googleapis.com/*";
+
+const API_ORDER_KEYS: Record<EraSearchOrder, MessageKey> = {
+  viewCount: "popup.apiOrderViewCount",
+  relevance: "popup.apiOrderRelevance",
+  date: "popup.apiOrderDate",
+  rating: "popup.apiOrderRelevance"
+};
+
+const API_ERROR_KEYS: Record<string, MessageKey> = {
+  "invalid-key": "popup.apiErrorInvalidKey",
+  "not-enabled": "popup.apiErrorNotEnabled",
+  quota: "popup.apiErrorQuota",
+  forbidden: "popup.apiErrorNotEnabled",
+  network: "popup.apiErrorNetwork",
+  "no-permission": "popup.apiErrorPermission"
+};
 
 const SURFACE_KEYS: Record<ConfigurableSurface, MessageKey> = {
   home: "popup.surface.home",
@@ -50,6 +76,12 @@ const fillRoundsInput = required<HTMLInputElement>("#fill-rounds");
 const hideFeaturesInput = required<HTMLInputElement>("#hide-future-features");
 const discoverInput = required<HTMLInputElement>("#discover-era");
 const featuresContainer = required<HTMLElement>("#features");
+const apiKeyInput = required<HTMLInputElement>("#api-key");
+const apiVerifyButton = required<HTMLButtonElement>("#api-verify");
+const apiRemoveButton = required<HTMLButtonElement>("#api-remove");
+const apiStatusLine = required<HTMLElement>("#api-status");
+const apiOrderSelect = required<HTMLSelectElement>("#api-order");
+const apiUsageLine = required<HTMLElement>("#api-usage");
 const dateSummary = required<HTMLElement>("#virtual-date-summary");
 const dateError = required<HTMLElement>("#virtual-date-error");
 const badgeInput = required<HTMLInputElement>("#badge");
@@ -204,6 +236,8 @@ function render(settings: Settings): void {
   fillRoundsInput.disabled = !settings.fillFeed;
   hideFeaturesInput.checked = settings.hideFutureFeatures;
   discoverInput.checked = settings.discoverEra;
+  apiKeyInput.value = settings.apiKey;
+  apiOrderSelect.value = settings.apiOrder;
   languageSelect.value = settings.language;
 
   renderFeatures(settings);
@@ -258,6 +292,16 @@ function bind(): void {
 
   fillFeedInput.addEventListener("change", () => {
     void save({ fillFeed: fillFeedInput.checked });
+  });
+
+  apiVerifyButton.addEventListener("click", () => {
+    void verifyAndSaveKey();
+  });
+
+  apiRemoveButton.addEventListener("click", () => {
+    apiKeyInput.value = "";
+    setApiStatus("");
+    void save({ apiKey: "" });
   });
 
   discoverInput.addEventListener("change", () => {
@@ -332,15 +376,111 @@ function bind(): void {
   }
 }
 
+function buildApiOrderOptions(): void {
+  for (const order of API_ORDERS) {
+    const option = document.createElement("option");
+    option.value = order;
+    option.dataset["i18n"] = API_ORDER_KEYS[order];
+    apiOrderSelect.appendChild(option);
+  }
+
+  apiOrderSelect.addEventListener("change", () => {
+    void save({ apiOrder: apiOrderSelect.value as EraSearchOrder });
+  });
+}
+
+function setApiStatus(message: string, isError = false): void {
+  apiStatusLine.textContent = message;
+  apiStatusLine.classList.toggle("status--error", isError);
+  apiStatusLine.classList.toggle("status--active", !isError && message !== "");
+}
+
+async function refreshUsage(): Promise<void> {
+  const usage = await readUsage();
+  apiUsageLine.textContent = t("popup.apiUsage", {
+    units: usage.units,
+    limit: DAILY_QUOTA
+  });
+}
+
+/**
+ * Verify a key and store it.
+ *
+ * The host permission is optional and requested here, inside the click, since
+ * Chrome only grants permission requests during a user gesture. Asking at this
+ * moment also means someone who never uses the API is never asked at all.
+ */
+async function verifyAndSaveKey(): Promise<void> {
+  const key = apiKeyInput.value.trim();
+
+  if (key === "") {
+    await save({ apiKey: "" });
+    setApiStatus("");
+    return;
+  }
+
+  apiVerifyButton.disabled = true;
+  setApiStatus(t("popup.apiChecking"));
+
+  try {
+    const granted = await chrome.permissions.request({
+      origins: [API_ORIGIN_PATTERN]
+    });
+
+    if (!granted) {
+      setApiStatus(t("popup.apiErrorPermission"), true);
+      return;
+    }
+
+    const response = await chrome.runtime.sendMessage({
+      type: MESSAGE_VERIFY_API_KEY,
+      apiKey: key
+    });
+
+    if (!isApiKeyVerifiedResponse(response)) {
+      setApiStatus(t("popup.apiErrorUnexpected", { detail: String(response) }), true);
+      return;
+    }
+
+    if (!response.ok) {
+      const messageKey = API_ERROR_KEYS[response.errorKind ?? ""];
+      setApiStatus(
+        messageKey
+          ? t(messageKey)
+          : t("popup.apiErrorUnexpected", { detail: response.detail ?? "" }),
+        true
+      );
+      return;
+    }
+
+    // Only a working key is stored, so a typo cannot sit in settings silently
+    // failing every search.
+    await save({ apiKey: key });
+    setApiStatus(t("popup.apiOk"));
+    await refreshUsage();
+  } catch (error) {
+    setApiStatus(
+      t("popup.apiErrorUnexpected", {
+        detail: error instanceof Error ? error.message : String(error)
+      }),
+      true
+    );
+  } finally {
+    apiVerifyButton.disabled = false;
+  }
+}
+
 async function main(): Promise<void> {
   buildSurfaceControls();
   buildLanguageOptions();
+  buildApiOrderOptions();
   bind();
 
   // The date picker should not offer days that cannot exist as an upload date.
   dateInput.max = todayAsCalendarDate();
 
   render(await loadSettings());
+  await refreshUsage();
 }
 
 void main();

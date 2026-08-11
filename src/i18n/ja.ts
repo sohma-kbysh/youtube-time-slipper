@@ -47,6 +47,32 @@ export const ja: Catalog = {
   "discover.none":
     "この時代の新しい動画はまだ見つかりませんでした。期間を広げるか、その時代の動画を一度開いてから戻ってみてください。",
   "discover.refresh": "さらに探す",
+  "popup.apiSection": "YouTube Data API（任意）",
+  "popup.apiIntro":
+    "自分の API キーを設定すると、指定した期間に公開された動画を再生回数順で YouTube に直接問い合わせられます。今のおすすめから推測するのではなく、その時代の実際のデータです。",
+  "popup.apiKey": "あなたの API キー",
+  "popup.apiGetKey": "キーの取得方法",
+  "popup.apiVerify": "確認して保存",
+  "popup.apiRemove": "削除",
+  "popup.apiPrivacy":
+    "キーはこのブラウザ内にのみ保存され、送信先は googleapis.com だけです。拡張機能は独自のキーを同梱していないため、クォータはあなた専用です。",
+  "popup.apiOrder": "並び順",
+  "popup.apiOrderViewCount": "再生回数",
+  "popup.apiOrderRelevance": "関連度",
+  "popup.apiOrderDate": "期間内で新しい順",
+  "popup.apiOk": "キーは有効です。期間検索が使えます。",
+  "popup.apiChecking": "キーを確認しています…",
+  "popup.apiUsage": "本日およそ {units} クォータを使用（上限はおよそ {limit}）。",
+  "popup.apiUsageNote":
+    "この数値はローカル集計です。Google 側のクォータは米国太平洋時間の深夜にリセットされます。検索 1 回で 100 クォータ、同じ検索はキャッシュされます。",
+  "popup.apiErrorInvalidKey": "キーが拒否されました。全体を正しくコピーできているか確認してください。",
+  "popup.apiErrorNotEnabled":
+    "キー自体は有効ですが、そのプロジェクトで YouTube Data API v3 が有効化されていません。",
+  "popup.apiErrorQuota": "このキーは本日のクォータを使い切っています。",
+  "popup.apiErrorPermission":
+    "googleapis.com へのアクセス許可が拒否されたため、キーを使用できません。",
+  "popup.apiErrorNetwork": "googleapis.com に接続できませんでした。",
+  "popup.apiErrorUnexpected": "キーを確認できませんでした: {detail}",
   "popup.language": "言語",
   "popup.languageAuto": "自動",
   "popup.statusOn": "{date} より後に公開された動画は非表示です。",

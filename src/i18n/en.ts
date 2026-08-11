@@ -55,6 +55,32 @@ export const en = {
   "discover.none":
     "Nothing new found from this era yet. Try a wider window, or open a video from the period and come back.",
   "discover.refresh": "Find more",
+  "popup.apiSection": "YouTube Data API (optional)",
+  "popup.apiIntro":
+    "With your own API key, discovery can ask YouTube directly for videos published between your dates, ranked by views — a real sample of the period rather than a guess from today's recommendations.",
+  "popup.apiKey": "Your API key",
+  "popup.apiGetKey": "How to get a key",
+  "popup.apiVerify": "Verify and save",
+  "popup.apiRemove": "Remove",
+  "popup.apiPrivacy":
+    "The key is stored in this browser only and sent to googleapis.com and nowhere else. The extension ships no key of its own, so your quota is yours alone.",
+  "popup.apiOrder": "Rank results by",
+  "popup.apiOrderViewCount": "Views",
+  "popup.apiOrderRelevance": "Relevance",
+  "popup.apiOrderDate": "Newest in period",
+  "popup.apiOk": "Key works — era search is on.",
+  "popup.apiChecking": "Checking the key…",
+  "popup.apiUsage": "About {units} quota units used today, of roughly {limit}.",
+  "popup.apiUsageNote":
+    "Counted locally; Google's own quota resets at midnight US Pacific time. One search costs 100 units, and repeated searches are cached.",
+  "popup.apiErrorInvalidKey": "That key was rejected. Check it was copied in full.",
+  "popup.apiErrorNotEnabled":
+    "The key works, but YouTube Data API v3 is not enabled for its project.",
+  "popup.apiErrorQuota": "This key has used up today's quota.",
+  "popup.apiErrorPermission":
+    "Permission to reach googleapis.com was declined, so the key cannot be used.",
+  "popup.apiErrorNetwork": "Could not reach googleapis.com.",
+  "popup.apiErrorUnexpected": "The key could not be verified: {detail}",
   "popup.language": "Language",
   "popup.languageAuto": "Automatic",
   "popup.statusOn": "Videos published after {date} are hidden.",

@@ -47,6 +47,32 @@ export const es: Catalog = {
   "discover.none":
     "Todavía no se ha encontrado nada nuevo de esta época. Prueba con un periodo más amplio, o abre un vídeo de entonces y vuelve.",
   "discover.refresh": "Buscar más",
+  "popup.apiSection": "API de datos de YouTube (opcional)",
+  "popup.apiIntro":
+    "Con tu propia clave de API, el descubrimiento puede pedirle a YouTube directamente los vídeos publicados entre tus fechas, ordenados por visitas: una muestra real de la época en lugar de una deducción a partir de las recomendaciones de hoy.",
+  "popup.apiKey": "Tu clave de API",
+  "popup.apiGetKey": "Cómo conseguir una clave",
+  "popup.apiVerify": "Verificar y guardar",
+  "popup.apiRemove": "Eliminar",
+  "popup.apiPrivacy":
+    "La clave se guarda sólo en este navegador y se envía únicamente a googleapis.com. La extensión no incluye ninguna clave propia, así que tu cuota es sólo tuya.",
+  "popup.apiOrder": "Ordenar resultados por",
+  "popup.apiOrderViewCount": "Visitas",
+  "popup.apiOrderRelevance": "Relevancia",
+  "popup.apiOrderDate": "Más recientes del periodo",
+  "popup.apiOk": "La clave funciona: la búsqueda por época está activa.",
+  "popup.apiChecking": "Comprobando la clave…",
+  "popup.apiUsage": "Hoy se han usado unas {units} unidades de cuota, de aproximadamente {limit}.",
+  "popup.apiUsageNote":
+    "Contado localmente; la cuota de Google se reinicia a medianoche del Pacífico. Cada búsqueda cuesta 100 unidades y las repetidas se sirven de la caché.",
+  "popup.apiErrorInvalidKey": "Esa clave fue rechazada. Comprueba que la copiaste entera.",
+  "popup.apiErrorNotEnabled":
+    "La clave es válida, pero YouTube Data API v3 no está habilitada en su proyecto.",
+  "popup.apiErrorQuota": "Esta clave ha agotado la cuota de hoy.",
+  "popup.apiErrorPermission":
+    "Se denegó el permiso para acceder a googleapis.com, así que la clave no puede usarse.",
+  "popup.apiErrorNetwork": "No se pudo contactar con googleapis.com.",
+  "popup.apiErrorUnexpected": "No se pudo verificar la clave: {detail}",
   "popup.language": "Idioma",
   "popup.languageAuto": "Automático",
   "popup.statusOn": "Los vídeos publicados después del {date} están ocultos.",

@@ -81,6 +81,37 @@
       </section>
 
       <details class="field">
+        <summary class="field__summary" data-i18n="popup.apiSection"></summary>
+        <p class="field__hint" data-i18n="popup.apiIntro"></p>
+
+        <label class="field__label field__label--tight" for="api-key" data-i18n="popup.apiKey"></label>
+        <div class="field__row">
+          <input type="password" id="api-key" autocomplete="off" spellcheck="false" placeholder="AIza…" />
+        </div>
+        <div class="field__row">
+          <button type="button" id="api-verify" class="button" data-i18n="popup.apiVerify"></button>
+          <button type="button" id="api-remove" class="button button--ghost" data-i18n="popup.apiRemove"></button>
+        </div>
+        <p class="status" id="api-status" role="status"></p>
+
+        <label class="field__label field__label--tight" for="api-order" data-i18n="popup.apiOrder"></label>
+        <select id="api-order" class="select"></select>
+
+        <p class="field__hint" id="api-usage"></p>
+        <p class="field__hint" data-i18n="popup.apiUsageNote"></p>
+        <p class="field__hint" data-i18n="popup.apiPrivacy"></p>
+        <p class="field__hint">
+          <a
+            id="api-get-key"
+            href="https://console.cloud.google.com/apis/library/youtube.googleapis.com"
+            target="_blank"
+            rel="noreferrer noopener"
+            data-i18n="popup.apiGetKey"
+          ></a>
+        </p>
+      </details>
+
+      <details class="field">
         <summary class="field__summary" data-i18n="popup.features"></summary>
         <label class="switch switch--indented">
           <input type="checkbox" id="hide-future-features" />

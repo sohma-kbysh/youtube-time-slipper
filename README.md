@@ -225,6 +225,51 @@ What this is not: it cannot reconstruct what was actually trending in
 more. It finds what today's YouTube considers close to the era's videos,
 which is a different and more modest claim.
 
+## Optional: your own YouTube Data API key
+
+The related-video walk infers an era from what YouTube considers similar.
+With an API key it can stop inferring: `search.list` takes
+`publishedAfter` and `publishedBefore` directly, so the extension can ask
+for "videos published between these two dates, ranked by views" — a real
+sample of the period, entirely independent of your watch history.
+
+**The extension ships no key of its own, by design.** A shared key would
+be exhausted within minutes of a handful of installs (10,000 quota units
+a day, 100 per search), and it would bill one person for everyone else's
+browsing. So the key is yours:
+
+1. Create a project in the [Google Cloud
+   console](https://console.cloud.google.com/apis/library/youtube.googleapis.com)
+   and enable **YouTube Data API v3**.
+2. Create an API key under *Credentials*. Restricting it to the YouTube
+   Data API is a good idea.
+3. Paste it into the popup under **YouTube Data API** and press *Verify
+   and save*.
+
+What happens to the key:
+
+- It is stored in your browser's local extension storage and sent to
+  `googleapis.com` and nowhere else. There is no server in this project
+  to send it to.
+- Access to `googleapis.com` is an **optional** host permission,
+  requested at the moment you save a key. Never enter one and Chrome
+  never grants it.
+- Only a key that verifies is stored, so a typo cannot sit in settings
+  failing every search silently. Verification uses a one-unit call rather
+  than spending a search.
+- Bad key, API not enabled, and quota exhausted are reported as three
+  different messages, because they have three different fixes.
+
+Quota is treated as the scarce resource it is: identical searches are
+cached for twelve hours, the popup shows roughly how many units the day
+has cost, and if the quota runs out the extension falls back to the free
+related-video walk rather than failing.
+
+The search is also given the page's context, so it asks the era version
+of the question you are actually asking: your search terms on a results
+page, the channel on a channel page, and "what was big at the time"
+otherwise.
+
 ## Languages
 
 The interface is available in English, 日本語, 简体中文, 한국어, Español
@@ -290,7 +335,11 @@ navigation came from.
   `chrome.storage.local`, and the resolved-date cache is stored in
   IndexedDB. Both stay on your machine.
 - Permissions requested: `storage`, and the host permission
-  `https://www.youtube.com/*`. Nothing else.
+  `https://www.youtube.com/*`. `https://www.googleapis.com/*` is
+  **optional** and requested only if you choose to save an API key.
+- If you supply an API key it is stored locally and sent only to
+  `googleapis.com`. Quota accounting and cached search results stay on
+  your machine too.
 
 ## Development / testing
 

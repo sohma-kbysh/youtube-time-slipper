@@ -47,6 +47,32 @@ export const de: Catalog = {
   "discover.none":
     "Noch nichts Neues aus dieser Zeit gefunden. Versuche einen größeren Zeitraum, oder öffne ein Video aus der Zeit und komm zurück.",
   "discover.refresh": "Mehr finden",
+  "popup.apiSection": "YouTube Data API (optional)",
+  "popup.apiIntro":
+    "Mit deinem eigenen API-Schlüssel kann die Suche YouTube direkt nach Videos fragen, die zwischen deinen Daten veröffentlicht wurden, sortiert nach Aufrufen — eine echte Stichprobe der Zeit statt einer Ableitung aus den heutigen Empfehlungen.",
+  "popup.apiKey": "Dein API-Schlüssel",
+  "popup.apiGetKey": "So bekommst du einen Schlüssel",
+  "popup.apiVerify": "Prüfen und speichern",
+  "popup.apiRemove": "Entfernen",
+  "popup.apiPrivacy":
+    "Der Schlüssel wird nur in diesem Browser gespeichert und ausschließlich an googleapis.com gesendet. Die Erweiterung bringt keinen eigenen Schlüssel mit, dein Kontingent gehört also dir allein.",
+  "popup.apiOrder": "Ergebnisse sortieren nach",
+  "popup.apiOrderViewCount": "Aufrufen",
+  "popup.apiOrderRelevance": "Relevanz",
+  "popup.apiOrderDate": "Neueste im Zeitraum",
+  "popup.apiOk": "Schlüssel funktioniert – die Zeitraumsuche ist aktiv.",
+  "popup.apiChecking": "Schlüssel wird geprüft…",
+  "popup.apiUsage": "Heute etwa {units} Kontingenteinheiten verbraucht, von ungefähr {limit}.",
+  "popup.apiUsageNote":
+    "Lokal gezählt; Googles Kontingent wird um Mitternacht US-Pazifikzeit zurückgesetzt. Eine Suche kostet 100 Einheiten, wiederholte Suchen kommen aus dem Cache.",
+  "popup.apiErrorInvalidKey": "Dieser Schlüssel wurde abgelehnt. Prüfe, ob er vollständig kopiert wurde.",
+  "popup.apiErrorNotEnabled":
+    "Der Schlüssel ist gültig, aber YouTube Data API v3 ist für sein Projekt nicht aktiviert.",
+  "popup.apiErrorQuota": "Dieser Schlüssel hat das heutige Kontingent aufgebraucht.",
+  "popup.apiErrorPermission":
+    "Die Berechtigung für googleapis.com wurde abgelehnt, der Schlüssel kann nicht verwendet werden.",
+  "popup.apiErrorNetwork": "googleapis.com war nicht erreichbar.",
+  "popup.apiErrorUnexpected": "Der Schlüssel konnte nicht geprüft werden: {detail}",
   "popup.language": "Sprache",
   "popup.languageAuto": "Automatisch",
   "popup.statusOn": "Videos, die nach dem {date} veröffentlicht wurden, sind ausgeblendet.",
