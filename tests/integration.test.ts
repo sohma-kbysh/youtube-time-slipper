@@ -114,9 +114,12 @@ function stateOf(id: string): string | null {
 
 let stopContentScript: (() => void) | null = null;
 
-async function bootContentScript(settings: Partial<Settings>): Promise<void> {
+async function bootContentScript(
+  settings: Partial<Settings>,
+  html: string = feed()
+): Promise<void> {
   installChromeStub(settings);
-  document.body.innerHTML = feed();
+  document.body.innerHTML = html;
 
   vi.resetModules();
   const { start } = await import("../src/content/index");
@@ -282,5 +285,136 @@ describe("content script, end to end", () => {
 
     const badge = document.querySelector(".time-slipper-badge");
     expect(badge?.textContent).toContain("2012-08-12");
+  });
+});
+
+/**
+ * The page must not merely lose videos — it has to remain a coherent page.
+ * These cover the difference the user actually sees: no orphaned shelves, an
+ * explanation instead of a blank screen, and more material requested.
+ */
+describe("a feed that filtering empties", () => {
+  function feedWithShelf(): string {
+    return `
+      <div id="contents">
+        <ytd-rich-shelf-renderer id="all-future">
+          <ytd-rich-item-renderer>
+            <a href="/watch?v=${NEW_VIDEO}">new</a>
+          </ytd-rich-item-renderer>
+        </ytd-rich-shelf-renderer>
+
+        <ytd-rich-shelf-renderer id="has-survivor">
+          <ytd-rich-item-renderer>
+            <a href="/watch?v=${NEW_VIDEO}">new</a>
+          </ytd-rich-item-renderer>
+          <ytd-rich-item-renderer>
+            <a href="/watch?v=${OLD_VIDEO}">old</a>
+          </ytd-rich-item-renderer>
+        </ytd-rich-shelf-renderer>
+
+        <ytd-rich-section-renderer id="no-videos">
+          <p>Breaking news</p>
+        </ytd-rich-section-renderer>
+
+        <ytd-continuation-item-renderer></ytd-continuation-item-renderer>
+      </div>
+    `;
+  }
+
+  function shelfState(id: string): string | null {
+    return document.querySelector(`#${id}`)?.getAttribute("data-time-slipper-shelf") ?? null;
+  }
+
+  it("removes a shelf whose videos are all in the future", async () => {
+    await bootContentScript({ enabled: true, virtualDate: "2012-08-12" }, feedWithShelf());
+
+    expect(shelfState("all-future")).toBe("empty");
+  });
+
+  it("keeps a shelf that still has something to show", async () => {
+    await bootContentScript({ enabled: true, virtualDate: "2012-08-12" }, feedWithShelf());
+
+    expect(shelfState("has-survivor")).toBeNull();
+  });
+
+  it("does not touch a shelf that holds no videos", async () => {
+    await bootContentScript({ enabled: true, virtualDate: "2012-08-12" }, feedWithShelf());
+
+    expect(shelfState("no-videos")).toBeNull();
+  });
+
+  it("explains the sparse page instead of leaving it blank", async () => {
+    await bootContentScript({ enabled: true, virtualDate: "2012-08-12" }, feedWithShelf());
+
+    const panel = document.querySelector(".time-slipper-empty");
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain("Not much of this page exists yet");
+    expect(panel?.querySelector("button")?.textContent).toBe("Load more");
+  });
+
+  it("asks YouTube for more videos", async () => {
+    const scrolled = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      value: scrolled,
+      configurable: true,
+      writable: true
+    });
+
+    await bootContentScript({ enabled: true, virtualDate: "2012-08-12" }, feedWithShelf());
+
+    // The continuation sentinel is what YouTube's own infinite scroll waits on.
+    expect(scrolled).toHaveBeenCalled();
+  });
+
+  it("leaves the page alone when refilling is switched off", async () => {
+    const scrolled = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      value: scrolled,
+      configurable: true,
+      writable: true
+    });
+
+    await bootContentScript(
+      { enabled: true, virtualDate: "2012-08-12", fillFeed: false },
+      feedWithShelf()
+    );
+
+    expect(scrolled).not.toHaveBeenCalled();
+    // Shelves are still collapsed: that is tidying, not refilling.
+    expect(shelfState("all-future")).toBe("empty");
+  });
+
+  it("restores every shelf when the extension is switched off", async () => {
+    await bootContentScript({ enabled: true, virtualDate: "2012-08-12" }, feedWithShelf());
+    expect(shelfState("all-future")).toBe("empty");
+
+    await updateSettings({ enabled: false });
+
+    expect(document.querySelectorAll("[data-time-slipper-shelf]")).toHaveLength(0);
+    expect(document.querySelector(".time-slipper-empty")).toBeNull();
+  });
+});
+
+describe("localisation", () => {
+  it("renders the on-page UI in the chosen language", async () => {
+    await bootContentScript({
+      enabled: true,
+      virtualDate: "2012-08-12",
+      language: "ja"
+    });
+
+    const badge = document.querySelector(".time-slipper-badge");
+    expect(badge?.getAttribute("title")).toContain("2012年8月12日");
+  });
+
+  it("falls back to English for a language it does not have", async () => {
+    await bootContentScript({
+      enabled: true,
+      virtualDate: "2012-08-12",
+      language: "auto"
+    });
+
+    const badge = document.querySelector(".time-slipper-badge");
+    expect(badge?.getAttribute("title")).toContain("2012");
   });
 });

@@ -23,6 +23,69 @@ html[data-time-slipper="on"][data-time-slipper-unknown="hide"]
   display: none !important;
 }
 
+/*
+ * A shelf whose videos are all hidden goes with them. Otherwise the page keeps
+ * the heading, the "Show less" control and the empty band where the row was,
+ * which reads as a broken page rather than a quieter one.
+ */
+html[data-time-slipper="on"] [data-time-slipper-shelf="empty"] {
+  display: none !important;
+}
+
+/* ------------------------------------------------------- refill panel */
+
+.time-slipper-empty {
+  grid-column: 1 / -1;
+  max-width: 42rem;
+  margin: 8px 0 24px;
+  padding: 20px 24px;
+  border: 1px solid rgba(127, 223, 255, 0.25);
+  border-radius: 12px;
+  background: rgba(127, 223, 255, 0.06);
+  color: inherit;
+  font-family: "Roboto", "Noto Sans JP", system-ui, sans-serif;
+}
+
+.time-slipper-empty__title {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.time-slipper-empty__body {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  opacity: 0.8;
+}
+
+.time-slipper-empty__status {
+  margin: 0 0 16px;
+  font-size: 0.75rem;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-slipper-empty__button {
+  padding: 8px 18px;
+  border: 1px solid rgba(127, 223, 255, 0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: #7fdfff;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.time-slipper-empty__button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.time-slipper-empty__button:not(:disabled):hover {
+  background: rgba(127, 223, 255, 0.12);
+}
+
 /* ------------------------------------------------------------ watch guard */
 
 /*

@@ -14,7 +14,7 @@
  * a future video is never presented as something you can watch.
  */
 
-import { formatCalendarDateHuman } from "../core/date.js";
+import type { Translator } from "../core/i18n.js";
 import type { CalendarDate } from "../core/types.js";
 import { ROOT_WATCH_ATTR } from "./visibility.js";
 
@@ -64,7 +64,9 @@ export function setWatchState(state: WatchState): void {
 export function showBlockOverlay(options: {
   virtualDate: CalendarDate;
   publishedDate: CalendarDate | null;
+  t: Translator;
 }): void {
+  const t = options.t;
   setWatchState("blocked");
 
   whenBodyReady(() => {
@@ -80,26 +82,26 @@ export function showBlockOverlay(options: {
     title.className = `${OVERLAY_CLASS}__title`;
     title.textContent =
       options.publishedDate === null
-        ? "This video has no known place in your timeline."
-        : "This video does not exist yet.";
+        ? t("block.titleUnknown")
+        : t("block.titleFuture");
     panel.appendChild(title);
 
     const rows = document.createElement("dl");
     rows.className = `${OVERLAY_CLASS}__rows`;
-    appendRow(rows, "Virtual present", formatCalendarDateHuman(options.virtualDate));
+    appendRow(rows, t("block.virtualPresent"), t.date(options.virtualDate));
     appendRow(
       rows,
-      "Published",
+      t("block.published"),
       options.publishedDate === null
-        ? "unknown"
-        : formatCalendarDateHuman(options.publishedDate)
+        ? t("block.unknown")
+        : t.date(options.publishedDate)
     );
     panel.appendChild(rows);
 
     const button = document.createElement("button");
     button.type = "button";
     button.className = `${OVERLAY_CLASS}__button`;
-    button.textContent = "Go Back";
+    button.textContent = t("block.goBack");
     button.addEventListener("click", goBack);
     panel.appendChild(button);
 

@@ -7,6 +7,7 @@
  * way to notice you left the timeline switched on.
  */
 
+import type { Translator } from "../core/i18n.js";
 import type { Settings } from "../core/types.js";
 import { findMastheadMount } from "./adapters.js";
 
@@ -34,7 +35,7 @@ function createBadge(): HTMLElement {
  * Called on every scan because YouTube rebuilds its masthead across SPA
  * navigations, which silently detaches anything injected into it.
  */
-export function mountBadge(settings: Settings): void {
+export function mountBadge(settings: Settings, t: Translator): void {
   if (!settings.showTimelineBadge) {
     removeBadge();
     return;
@@ -43,7 +44,7 @@ export function mountBadge(settings: Settings): void {
   if (!document.body) return;
 
   if (!badge) badge = createBadge();
-  updateBadge(settings);
+  updateBadge(settings, t);
 
   if (badge.isConnected) return;
 
@@ -59,12 +60,14 @@ export function mountBadge(settings: Settings): void {
   }
 }
 
-export function updateBadge(settings: Settings): void {
+export function updateBadge(settings: Settings, t: Translator): void {
   if (!badge) return;
 
   const label = badge.querySelector(`.${BADGE_CLASS}__label`);
+  // The date stays in ISO form here: it is a fixed-width, unambiguous token in
+  // a small badge, where a localised long date would wrap or be truncated.
   if (label) label.textContent = `TIME SLIPPER · ${settings.virtualDate}`;
-  badge.title = `Showing videos published on or before ${settings.virtualDate}`;
+  badge.title = t("badge.tooltip", { date: t.date(settings.virtualDate) });
 }
 
 export function removeBadge(): void {

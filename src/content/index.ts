@@ -8,7 +8,13 @@
  */
 
 import { calendarDateFromIso } from "../core/date.js";
-import { debug } from "../core/log.js";
+import {
+  browserLanguages,
+  createTranslator,
+  resolveLanguage,
+  type Translator
+} from "../core/i18n.js";
+import { debug, warn } from "../core/log.js";
 import {
   MAX_VIDEO_IDS_PER_REQUEST,
   MESSAGE_RESOLVE_VIDEO_DATES,
@@ -18,7 +24,14 @@ import { decideCardState, isActive, isSurfaceEnabled } from "../core/policy.js";
 import type { CalendarDate, Settings, VideoId } from "../core/types.js";
 import { defaultSettings, loadSettings, onSettingsChanged } from "../storage/settings.js";
 import { detectPageSurface, readDocumentPublicationMeta } from "./adapters.js";
+import { Backfill } from "./backfill.js";
 import { mountBadge, removeBadge, updateBadge } from "./badge.js";
+import {
+  removeEmptyState,
+  renderEmptyState,
+  setLoadMoreHandler
+} from "./empty-state.js";
+import { collapseEmptyShelves, countVisibleCards, resetShelves } from "./shelf.js";
 import { collectCandidates, prioritize, type CardCandidate } from "./scanner.js";
 import { currentWatchVideoId } from "./video-id.js";
 import {
@@ -68,6 +81,19 @@ let blockedVideoId: VideoId | null = null;
 let observer: MutationObserver | null = null;
 let unsubscribeSettings: (() => void) | null = null;
 const documentListeners: Array<[EventTarget, string, EventListener]> = [];
+
+let t: Translator = createTranslator("en");
+
+const backfill = new Backfill();
+
+/**
+ * Set once the user scrolls by hand. After that we stop moving the viewport
+ * for them, and refilling continues only when they ask for it.
+ */
+let userHasScrolled = false;
+
+/** Surfaces where refilling makes sense; a watch page is not a feed. */
+const FEED_SURFACES = new Set(["home", "search", "subscriptions", "channel", "playlists"]);
 
 // --------------------------------------------------------------------- boot
 
@@ -140,6 +166,7 @@ export function stop(): void {
 
 function applySettings(options: { rescan: boolean }): void {
   const active = isActive(settings);
+  t = createTranslator(resolveLanguage(settings.language, browserLanguages()));
   applyRootFlags(settings, active);
 
   if (!active) {
@@ -147,20 +174,25 @@ function applySettings(options: { rescan: boolean }): void {
     return;
   }
 
-  updateBadge(settings);
+  updateBadge(settings, t);
 
   // Dates are immutable, so a changed virtual date needs no re-resolution —
-  // only re-classification of what we already know.
+  // only re-classification of what we already know. A different cutoff can
+  // change how much survives, so the refill budget starts again.
   guardedVideoId = null;
+  backfill.reset();
   if (options.rescan) scheduleScan(true);
 }
 
 function teardown(): void {
   resetAllCards();
+  resetShelves();
+  removeEmptyState();
   clearRootFlags();
   removeBlockOverlay();
   setWatchState("idle");
   removeBadge();
+  backfill.reset();
   guardedVideoId = null;
   blockedVideoId = null;
 }
@@ -184,6 +216,20 @@ function observe(): void {
   listen(document, "yt-navigate-finish");
   listen(window, "popstate");
   listen(window, "pageshow");
+
+  // Once the user takes over scrolling, refilling stops moving the viewport.
+  const scrolled: EventListener = () => {
+    userHasScrolled = true;
+  };
+  for (const type of ["wheel", "touchmove", "keydown"]) {
+    window.addEventListener(type, scrolled, { passive: true });
+    documentListeners.push([window, type, scrolled]);
+  }
+
+  setLoadMoreHandler(() => {
+    backfill.requestAnother(true);
+    scheduleScan(false);
+  });
 }
 
 function listen(target: EventTarget, type: string): void {
@@ -214,10 +260,62 @@ function scheduleScan(immediate: boolean): void {
 function runScan(): void {
   if (!isActive(settings)) return;
 
-  detectNavigation();
-  evaluateWatchPage();
-  evaluateCards();
-  mountBadge(settings);
+  // One unexpected DOM condition must not abort the pass and leave cards stuck
+  // in `pending` — which, since pending is hidden, would look like the
+  // extension had eaten the page.
+  try {
+    detectNavigation();
+    evaluateWatchPage();
+    evaluateCards();
+    refillFeed();
+    mountBadge(settings, t);
+  } catch (error) {
+    warn("scan failed", error);
+  }
+}
+
+/**
+ * Keep a filtered feed from collapsing into a blank page.
+ *
+ * Emptied shelves are removed first, then — if too little survived — YouTube is
+ * asked for more, and the panel explains what is happening. None of this
+ * relaxes the filter: it only changes how much material the filter is applied
+ * to.
+ */
+function refillFeed(): void {
+  const surface = detectPageSurface(window.location);
+  if (!FEED_SURFACES.has(surface)) {
+    removeEmptyState();
+    return;
+  }
+
+  collapseEmptyShelves(settings);
+
+  const { visible, total } = countVisibleCards(settings);
+
+  // Cards still being resolved are not failures yet; waiting avoids asking for
+  // more the instant the page loads, before anything has had a chance to pass.
+  const stillResolving = requested.size > resolutions.size;
+
+  if (!settings.fillFeed || stillResolving) {
+    renderEmptyState(
+      { status: stillResolving ? "loading" : "idle", visible, total, virtualDate: settings.virtualDate },
+      t
+    );
+    return;
+  }
+
+  const status = backfill.update({
+    visible,
+    total,
+    allowScroll: !userHasScrolled
+  });
+
+  renderEmptyState({ status, visible, total, virtualDate: settings.virtualDate }, t);
+
+  // Ask again shortly: the next batch arrives asynchronously, and the mutation
+  // observer may not fire if YouTube appended nothing.
+  if (status === "loading") scheduleScan(false);
 }
 
 /**
@@ -231,6 +329,12 @@ function detectNavigation(): void {
   lastHref = href;
   guardedVideoId = null;
   blockedVideoId = null;
+
+  // A new page gets a fresh refill budget, and the user starts at the top of
+  // it, so it is fair to scroll for them again.
+  backfill.reset();
+  userHasScrolled = false;
+  removeEmptyState();
 
   const videoId = currentWatchVideoId(window.location);
   if (videoId) {
@@ -344,7 +448,8 @@ function evaluateWatchPage(): void {
     if (blockedVideoId === videoId && !isBlockOverlayPresent()) {
       showBlockOverlay({
         virtualDate: settings.virtualDate,
-        publishedDate: resolutions.get(videoId) ?? null
+        publishedDate: resolutions.get(videoId) ?? null,
+        t
       });
     }
     return;
@@ -382,7 +487,7 @@ function evaluateWatchPage(): void {
   }
 
   blockedVideoId = videoId;
-  showBlockOverlay({ virtualDate: settings.virtualDate, publishedDate: known });
+  showBlockOverlay({ virtualDate: settings.virtualDate, publishedDate: known, t });
 }
 
 /**

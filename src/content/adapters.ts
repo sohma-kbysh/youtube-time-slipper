@@ -68,6 +68,25 @@ export const SHELF_SELECTOR = [
   "ytd-section-list-renderer"
 ].join(", ");
 
+/**
+ * YouTube's own infinite-scroll sentinel. Bringing it into view is what makes
+ * the site fetch the next page.
+ */
+export const CONTINUATION_SELECTOR = [
+  "ytd-continuation-item-renderer",
+  "yt-next-continuation",
+  "#continuations"
+].join(", ");
+
+/** Containers a refill panel can be placed at the top of. */
+export const FEED_CONTAINER_SELECTOR = [
+  "ytd-rich-grid-renderer #contents",
+  "ytd-section-list-renderer #contents",
+  "ytd-watch-next-secondary-results-renderer #contents",
+  "#primary #contents",
+  "#contents"
+].join(", ");
+
 /** Elements carrying the card's metadata line ("3 years ago", "3 年前"). */
 export const METADATA_TEXT_SELECTOR = [
   "#metadata-line",
